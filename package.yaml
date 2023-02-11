@@ -21,6 +21,8 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- random
+- transformers
 
 ghc-options:
 - -Wall
@@ -46,6 +48,9 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - blackjack
+    when:
+    - condition: false
+      other-modules: Paths_Blackjack
 
 tests:
   blackjack-test:
