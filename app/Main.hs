@@ -1,10 +1,12 @@
 module Main (main) where
 
-import Deck (Card, Deck, shuffle, genDecks, cardValue)
+import Deck 
 import System.Random
+import Control.Monad
 import Control.Monad.Trans.State
 import Control.Monad.Trans.Class
 import Text.Read (readMaybe)
+import Data.Maybe (catMaybes)
 
 data Game = Game
     { deck :: Deck
@@ -47,15 +49,16 @@ shuffleDeck = do
     let (shufDeck, gen') = shuffle (deck game) (gen game)
     let game' = game {deck = shufDeck, gen = gen'}
     put game'
+    return shufDeck
 
 cutCard :: Monad m => GameT m Int
-cutCard :: do
+cutCard = do
     game <- get
     let dkSize = length (deck game)
     let (index, gen') = randomR (0.35 * fromIntegral dkSize
                                   ,0.45 * fromIntegral dkSize) (gen game)
     let pen = ceiling index
-    let game' = game { penetration = pen, gen = gen')
+    let game' = game { penetration = pen, gen = gen' }
     put game'
     return pen
 
@@ -74,17 +77,18 @@ handValue hs = if isSoft hs
                     then handSum hs + 10
                else handSum hs
 
-drawCard :: Monad m => GameT m (Maybe [Card])
+drawCard :: Monad m => GameT m (Maybe Card)
 drawCard = do
     g <- get
     let deck' = deck g
-    if n > length deck'
+    if length deck' == 0
         then return Nothing
         else do
             let (drawnCard, remainingDeck) = (head deck', tail deck')
             put $ g { deck = remainingDeck }
             return $ Just drawnCard
 
+{-
 drawN :: Monad m => Int -> GameT m (Maybe [Card])
 drawN n = do
     g <- get
@@ -127,7 +131,22 @@ gameLoop = do
                     lift $ putStrLn $ "Table: " ++ show xs
                     lift $ printTableValue xs
                     gameLoop
+-}
 
+openingDeal :: Monad m => GameT m [[Card]]
+openingDeal = do
+    g <- get
+    let activePlayers =  players g
+    updatedPlayers <- forM activePlayers (\p -> do
+        let activeBets = length $ filter (>0) (bet p)
+        let newHands = replicateM activeBets $ replicateM 1 drawCard
+        let hands' = catMaybes <$> newHands
+        return $ p {hands = hands'})
+    put $ g { players = updatedPlayers }
+    return $ concatMap hands updatedPlayers
+
+
+{-
 main :: IO ()
 main = do
     putStrLn "Enter a seed value: "
@@ -137,3 +156,4 @@ main = do
     let initialGame = Game {deck = genDecks 6, discard = [], table = [], gen = initGen}
     _ <- execStateT (shuffleDeck >> gameLoop) initialGame
     putStrLn "Thanks for playing"
+-}

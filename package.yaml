@@ -50,8 +50,7 @@ executables:
     - blackjack
     when:
     - condition: false
-      other-modules: Paths_Blackjack
-
+      other-modules: Paths_blackjack
 tests:
   blackjack-test:
     main:                Spec.hs
