@@ -195,7 +195,7 @@ testGame = Game
     , penetration = 66
     , gen         = mkStdGen 0}
 
-
+newGame = execState dealOpeningHands testGame
 
 main :: IO ()
-main = undefined
+main = print newGame
