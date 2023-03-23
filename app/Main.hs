@@ -7,14 +7,15 @@ import Control.Monad.Trans.State
 import Control.Monad.Trans.Class
 import Text.Read (readMaybe)
 import Data.Maybe (catMaybes)
+import Control.Lens
 
 data Game = Game
-    { deck :: Deck
-    , discard :: Deck
-    , dealer :: Player
-    , players :: [Player]
+    { deck        :: Deck
+    , discard     :: Deck
+    , dealer      :: Player
+    , players     :: [Player]
     , penetration :: Int
-    , gen :: StdGen}
+    , gen         :: StdGen}
     deriving (Show)
 
 type Money = Int
@@ -22,20 +23,28 @@ type Money = Int
 type Hand = [Card]
 
 data Player = Player { playerName :: String
-                     , hands :: [Hand]
-                     , bankroll:: Money
-                     , bet :: [Money] }
+                     , hands      :: [Hand]
+                     , bankroll   :: Money
+                     , bet        :: [Money] }
             | Dealer { playerName :: String
-                     , hand :: Hand }
+                     , hand       :: Hand
+                     , hiddenHand :: Hand }
      deriving (Eq)
+
+
 
 instance Show Player where
     show (Player name hs br bs) = "Player: " ++ name ++
                                   "\nHands: " ++ show hs ++
                                   "\nBets: " ++ show bs ++
                                   "\nBankroll: " ++ show br
-    show (Dealer name hs)       = "Dealer: " ++ name ++
-                                  "\nHand: " ++ show hs
+    show (Dealer name hs hh)    = if hh == []
+                                    then "Dealer: " ++ name ++
+                                         "\nHand: " ++ show hs
+                                    else "Dealer: " ++ name ++
+                                         "\nHand: " ++ hideCard
+        where
+            hideCard = (takeWhile (/=',') $ show (hs ++ hh)) ++ ", XXX]"
 
 type GameT m = StateT Game m
 
@@ -55,8 +64,8 @@ cutCard :: Monad m => GameT m Int
 cutCard = do
     game <- get
     let dkSize = length (deck game)
-    let (index, gen') = randomR (0.35 * fromIntegral dkSize
-                                  ,0.45 * fromIntegral dkSize) (gen game)
+    let (index, gen') = randomR ((0.35 * fromIntegral dkSize) :: Double
+                                ,(0.45 * fromIntegral dkSize) :: Double) (gen game)
     let pen = ceiling index
     let game' = game { penetration = pen, gen = gen' }
     put game'
@@ -77,83 +86,116 @@ handValue hs = if isSoft hs
                     then handSum hs + 10
                else handSum hs
 
-drawCard :: Monad m => GameT m (Maybe Card)
-drawCard = do
-    g <- get
-    let deck' = deck g
-    if length deck' == 0
-        then return Nothing
-        else do
-            let (drawnCard, remainingDeck) = (head deck', tail deck')
-            put $ g { deck = remainingDeck }
-            return $ Just drawnCard
+dealOpeningHands :: Monad m => GameT m ()
+dealOpeningHands = do
+    game <- get
+    let players' = players game
+    let deck' = deck game
+    let dealer' = dealer game
+    let (newPlayers, newDeck) = dealFirstCard ([], deck') players'
+    let (dealer1, newDeck') = dealerCard newDeck dealer'
+    let (startPlayers, newDeck'') = startingHands ([], newDeck') newPlayers
+    let (dealer2, newDeck''') = dealerCardH newDeck'' dealer1
+    let game' = game { dealer = dealer2, players = startPlayers, deck = newDeck''' }
+    put game'
 
-{-
-drawN :: Monad m => Int -> GameT m (Maybe [Card])
-drawN n = do
-    g <- get
-    let deck' = deck g
-    let tabled = table g
-    let discarded = discard g
-    if n > length deck'
-        then return Nothing
-        else do
-            let (drawnCards, remainingDeck) = splitAt n deck'
-            put $ g { deck = remainingDeck, table = drawnCards, discard = tabled ++ discarded}
-            return $ Just drawnCards
+dealerCard :: Deck -> Player -> (Player, Deck)
+dealerCard d p = (p', d')
+    where
+        (c, d') = drawCard d
+        dealerHand = hand p
+        p' = p { hand = dealerHand ++ [c] }
 
-clearTable :: Monad m => GameT m ()
-clearTable = do
-    g <- get
-    let tabled = table g
-    let discarded = discard g
-    put $ g {table = [], discard = tabled ++ discarded}
-
-gameLoop :: GameT IO ()
-gameLoop = do
-    g <- get
-    lift $ putStrLn "How many cards would you like to draw?"
-    drawStr <- lift getLine
-    case readMaybe drawStr of
-        Nothing -> 
-            if drawStr == "quit" then lift $ return ()
-            else do
-                lift $ putStrLn "Invalid input. Please enter a number."
-                gameLoop
-        Just draw -> do
-            cards <- drawN draw
-            case cards of
-                Nothing -> do
-                    let remaining = length $ deck g
-                    lift $ putStrLn $ "Not enough cards left to draw " ++ 
-                            show draw ++ ". Only " ++ show remaining ++ " cards remaining."
-                Just xs -> do
-                    lift $ putStrLn $ "Table: " ++ show xs
-                    lift $ printTableValue xs
-                    gameLoop
--}
-
-openingDeal :: Monad m => GameT m [[Card]]
-openingDeal = do
-    g <- get
-    let activePlayers =  players g
-    updatedPlayers <- forM activePlayers (\p -> do
-        let activeBets = length $ filter (>0) (bet p)
-        let newHands = replicateM activeBets $ replicateM 1 drawCard
-        let hands' = catMaybes <$> newHands
-        return $ p {hands = hands'})
-    put $ g { players = updatedPlayers }
-    return $ concatMap hands updatedPlayers
+dealerCardH :: Deck -> Player -> (Player, Deck)
+dealerCardH d p = (p', d')
+    where
+        (c, d') = drawCard d
+        p' = p { hiddenHand = [c] }
 
 
-{-
+startingHands :: ([Player], Deck) -> [Player] -> ([Player], Deck)
+startingHands (processedPlayers, d) []     = (processedPlayers, d)
+startingHands (processedPlayers, d) (p:ps) = startingHands (processedPlayers ++ [p'], d') ps
+    where
+        (p', d') = dealSecondCard p d
+
+dealSecondCard :: Player -> Deck -> (Player, Deck)
+dealSecondCard p d = (p', d')
+    where
+        currentHands = hands p
+        (newHands, d') = drawSecond currentHands d :: ([Hand], Deck)
+        p' = p { hands = newHands }
+
+drawSecond :: [Hand] -> Deck -> ([Hand], Deck)
+drawSecond hs d = (newHands, d')
+    where
+        (newHands, d') = drawToHand ([], d) hs
+
+drawToHand :: ([Hand], Deck) -> [Hand]  -> ([Hand], Deck)
+drawToHand (hands, d) []     = (hands, d)
+drawToHand (hands, d) (h:hs) =
+    let (c, newDeck) = drawCard d
+        (newHand, d') = if length h == 1
+                            then (h ++ [c], newDeck)
+                            else (h, d)
+    in drawToHand (hands ++ [newHand], d') hs
+
+dealFirstCard :: ([Player], Deck) -> [Player] -> ([Player], Deck)
+dealFirstCard (processedPlayers, d) []     = (processedPlayers, d)
+dealFirstCard (processedPlayers, d) (p:ps) =  dealFirstCard (processedPlayers ++ [p'], d') ps
+    where
+        (p', d') = dealFirstPlayer p d
+
+dealFirstPlayer :: Player -> Deck -> (Player, Deck)
+dealFirstPlayer p d = (p', d')
+    where
+        numHands = length $ filter (>0) $ bet p
+        (newHands, d') = drawNInitial numHands ([], d) :: ([Hand], Deck)
+        p' = p { hands = newHands }
+
+drawNInitial :: Int -> ([[Card]], Deck) -> ([[Card]], Deck)
+drawNInitial 0 (c, dk) = (c, dk)
+drawNInitial n (c, dk) = drawNInitial (n-1) (c ++ [[c']], dk')
+    where
+        (c', dk') = drawCard dk
+
+drawCard :: Deck -> (Card, Deck)
+drawCard (c:d) = (c, d)
+drawCard [] = error "Cannot draw from an empty deck"
+
+
+testDealer :: Player
+testDealer = Dealer
+    { playerName = "testDealer"
+    , hand = []
+    }
+
+testPlayer1 :: Player
+testPlayer1 = Player
+    { playerName = "Jake"
+    , hands = [[]]
+    , bankroll = 100
+    , bet = [1,2,3]
+    }
+
+testPlayer2 :: Player
+testPlayer2 = Player
+    { playerName = "Josh"
+    , hands = [[]]
+    , bankroll = 100
+    , bet = [1,0,-1,23]
+    }
+
+testGame :: Game
+testGame = Game
+    { deck        = genDecks 2
+    , discard     = []
+    , dealer      = testDealer
+    , players     = [testPlayer1, testPlayer2]
+    , penetration = 66
+    , gen         = mkStdGen 0}
+
+
+
 main :: IO ()
-main = do
-    putStrLn "Enter a seed value: "
-    seedStr <- getLine
-    let seed = read seedStr :: Int
-    let initGen = mkStdGen seed
-    let initialGame = Game {deck = genDecks 6, discard = [], table = [], gen = initGen}
-    _ <- execStateT (shuffleDeck >> gameLoop) initialGame
-    putStrLn "Thanks for playing"
--}
+main = undefined
