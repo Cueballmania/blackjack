@@ -1,17 +1,13 @@
 import Deck 
 import Game
 import System.Random
-import Control.Monad
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Class
-import Text.Read (readMaybe)
-import Data.Maybe (catMaybes)
-import Control.Lens
 
-testDealer :: Player
+testDealer :: Dealer
 testDealer = Dealer
-    { playerName = "testDealer"
+    { dealerName = "testDealer"
     , hand = []
+    , hiddenHand = []
     }
 
 testPlayer1 :: Player

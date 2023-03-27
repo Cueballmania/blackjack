@@ -2,17 +2,12 @@ module Game where
 
 import Deck 
 import System.Random
-import Control.Monad
 import Control.Monad.Trans.State
-import Control.Monad.Trans.Class
-import Text.Read (readMaybe)
-import Data.Maybe (catMaybes)
-import Control.Lens
 
 data Game = Game
     { deck        :: Deck
     , discard     :: Deck
-    , dealer      :: Player
+    , dealer      :: Dealer
     , players     :: [Player]
     , penetration :: Int
     , gen         :: StdGen}
@@ -26,7 +21,8 @@ data Player = Player { playerName :: String
                      , hands      :: [Hand]
                      , bankroll   :: Money
                      , bet        :: [Money] }
-            | Dealer { playerName :: String
+
+data Dealer = Dealer { dealerName :: String
                      , hand       :: Hand
                      , hiddenHand :: Hand }
      deriving (Eq)
@@ -38,6 +34,8 @@ instance Show Player where
                                   "\nHands: " ++ show hs ++
                                   "\nBets: " ++ show bs ++
                                   "\nBankroll: " ++ show br
+                                  
+instance Show Dealer where
     show (Dealer name hs hh)    = if null hh
                                     then "Dealer: " ++ name ++
                                          "\nHand: " ++ show hs
@@ -99,14 +97,14 @@ dealOpeningHands = do
     let game' = game { dealer = dealer2, players = startPlayers, deck = newDeck''' }
     put game'
 
-dealerCard :: Deck -> Player -> (Player, Deck)
+dealerCard :: Deck -> Dealer -> (Dealer, Deck)
 dealerCard d p = (p', d')
     where
         (c, d') = drawCard d
         dealerHand = hand p
         p' = p { hand = dealerHand ++ [c] }
 
-dealerCardH :: Deck -> Player -> (Player, Deck)
+dealerCardH :: Deck -> Dealer -> (Dealer, Deck)
 dealerCardH d p = (p', d')
     where
         (c, d') = drawCard d
