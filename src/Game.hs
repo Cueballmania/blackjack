@@ -11,14 +11,6 @@ printTableValue :: [Card] -> IO ()
 printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
     where vals = sum [cardValue c | c <- cs]
 
-shuffleDeck :: Monad m => GameT m Deck
-shuffleDeck = do
-    game <- get
-    let (shufDeck, gen') = shuffle (deck game) (gen game)
-    let game' = game {deck = shufDeck, gen = gen'}
-    put game'
-    return shufDeck
-
 cutCard :: Monad m => GameT m Int
 cutCard = do
     game <- get
@@ -45,86 +37,49 @@ handValue hs = if isSoft hs
                     then handSum hs + 10
                else handSum hs
 
-dealOpeningHands :: Monad m => GameT m ()
-dealOpeningHands = do
-    game <- get
-    let (newPlayers, newDeck) = dealFirstCard ([], deck game) (players game)
-    let (dealer1, newDeck') = dealerCard newDeck (dealer game)
-    let (startPlayers, newDeck'') = startingHands ([], newDeck') newPlayers
-    let (dealer2, newDeck''') = dealerCardH newDeck'' dealer1
-    let game' = game { dealer = dealer2, players = startPlayers, deck = newDeck''' }
-    put game'
-
-dealerCard :: Deck -> Dealer -> (Dealer, Deck)
-dealerCard d p = (p', d')
+drawN :: Int -> ([[Card]], Deck, Deck, StdGen) -> ([[Card]], Deck, Deck, StdGen)
+drawN 0 (c, dk, dc, g) = (c, dk, dc, g)
+drawN n (c, dk, dc, g) = drawN (n-1) (c ++ [[c']], dk', dc', g')
     where
-        (c, d') = drawCard d
-        dealerHand = hand p
-        p' = p { hand = dealerHand ++ [c] }
+    (c', (dk', dc', g')) = drawCard (dk, dc, g)
 
-dealerCardH :: Deck -> Dealer -> (Dealer, Deck)
-dealerCardH d p = (p', d')
+drawCard :: (Deck, Deck, StdGen) -> (Card, (Deck, Deck, StdGen))
+drawCard (c:d, discard, g) = (c, (d, discard, g))
+drawCard ([], discard, g)  = drawCard (newDeck, [], h)
     where
-        (c, d') = drawCard d
-        p' = p { hiddenHand = [c] }
+        (newDeck, h) = shuffle discard g
 
-
-startingHands :: ([Player], Deck) -> [Player] -> ([Player], Deck)
-startingHands (processedPlayers, d) []     = (processedPlayers, d)
-startingHands (processedPlayers, d) (p:ps) = startingHands (processedPlayers ++ [p'], d') ps
+dealToAllPlayers :: ([Player], Deck, Deck, StdGen) -> [Player] -> ([Player], Deck, Deck, StdGen)
+dealToAllPlayers (processedPlayers, dk, dc, g) []     = (processedPlayers, dk, dc, g)
+dealToAllPlayers (processedPlayers, dk, dc, g) (p:ps) =  dealToAllPlayers (processedPlayers ++ [p'], dk', dc', g') ps
     where
-        (p', d') = dealSecondCard p d
+        (p', dk', dc', g') = dealToPlayer p (dk, dc, g)
 
-dealSecondCard :: Player -> Deck -> (Player, Deck)
-dealSecondCard p d = (p', d')
+dealToPlayer :: Player -> (Deck, Deck, StdGen) ->  (Player, Deck, Deck, StdGen)
+dealToPlayer p (dk, dc, g) = (p', dk', dc', g')
     where
-        currentHands = hands p
-        (newHands, d') = drawSecond currentHands d :: ([Hand], Deck)
-        p' = p { hands = newHands }
+        numHands = length $ bet p
+        (newHands, dk', dc', g') = drawN numHands ([], dk, dc, g)
+        p' = if hands p == [[]]
+                then p { hands = newHands}
+                else p { hands = zipWith (++) (hands p) newHands}
 
-drawSecond :: [Hand] -> Deck -> ([Hand], Deck)
-drawSecond hs d = (newHands, d')
-    where
-        (newHands, d') = drawToHand ([], d) hs
-
-drawToHand :: ([Hand], Deck) -> [Hand]  -> ([Hand], Deck)
-drawToHand (hands, d) []     = (hands, d)
-drawToHand (hands, d) (h:hs) =
-    let (c, newDeck) = drawCard d
-        (newHand, d') = if length h == 1
-                            then (h ++ [c], newDeck)
-                            else (h, d)
-    in drawToHand (hands ++ [newHand], d') hs
-
-dealFirstCard :: ([Player], Deck) -> [Player] -> ([Player], Deck)
-dealFirstCard (processedPlayers, d) []     = (processedPlayers, d)
-dealFirstCard (processedPlayers, d) (p:ps) =  dealFirstCard (processedPlayers ++ [p'], d') ps
-    where
-        (p', d') = dealFirstPlayer p d
-
-dealFirstPlayer :: Player -> Deck -> (Player, Deck)
-dealFirstPlayer p d = (p', d')
-    where
-        numHands = length $ filter (>0) $ bet p
-        (newHands, d') = drawNInitial numHands ([], d) :: ([Hand], Deck)
-        p' = p { hands = newHands }
-
-drawNInitial :: Int -> ([[Card]], Deck) -> ([[Card]], Deck)
-drawNInitial 0 (c, dk) = (c, dk)
-drawNInitial n (c, dk) = drawNInitial (n-1) (c ++ [[c']], dk')
-    where
-        (c', dk') = drawCard dk
-
-drawCard :: Deck -> (Card, Deck)
-drawCard (c:d) = (c, d)
-drawCard [] = error "Cannot draw from an empty deck"
+dealOpeningHands :: [Player] -> Dealer -> (Deck, Deck, StdGen) -> ([Player], Dealer, Deck, Deck, StdGen)
+dealOpeningHands ps d (deck, discard, gen) = 
+    let (firstCardPlayers, dk, dc, g) = dealToAllPlayers ([], deck, discard, gen) ps
+        (dealerCard, (dk', dc', g')) = drawCard (dk, dc, g)
+        (secondCardPlayers, dk'', dc'', g'') = dealToAllPlayers([], dk', dc', g') firstCardPlayers
+        (dealerHiddenCard, (dk''', dc''', g''')) = drawCard (dk'', dc'', g'')
+        newDealer = d {hand = [dealerCard], hiddenHand = [dealerHiddenCard] }       
+    in (secondCardPlayers, newDealer, dk''', dc''', g''')
 
 playGame :: GameT IO ()
 playGame = do
     game <- get
     playerWBets <- liftIO $ getBets (players game)
-    let game' = game { players = playerWBets }
-    liftIO $ print game'
+    let dealer' = dealer game
+    let (playerInitial, dealerInitial, dk, dc, g) = dealOpeningHands playerWBets dealer' (deck game, discard game, gen game)
+    let game' = game { players = playerInitial, dealer = dealerInitial, deck = dk, discard = dc, gen = g }
     put game'
     -- cleanup bets
     -- deal opening hands

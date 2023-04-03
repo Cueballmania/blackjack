@@ -22,12 +22,6 @@ getBets (p:ps) = do
   ps' <- getBets ps
   return (p':ps')
 
--- Prompts the user for up to `numBets` comma-separated bet amounts for a player
-promptPlayerBetsStrs :: Int -> Player -> IO String
-promptPlayerBetsStrs numBets player = do
-  putStrLn $ "Enter up to " ++ show numBets ++ " bets for player " ++ playerName player ++ " separated by commas:"
-  getLine
-
 -- Checks if a list of bets is valid for a player
 isValidBets :: [Money] -> Money -> Bool
 isValidBets bets br = all (> 0) bets && length bets <= 4 && sum bets <= br

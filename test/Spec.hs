@@ -1,4 +1,5 @@
-import Deck 
+import Deck
+import Types 
 import Game
 import System.Random
 import Control.Monad.Trans.State
@@ -35,8 +36,12 @@ testGame = Game
     , penetration = 66
     , gen         = mkStdGen 0}
 
-newGame :: Game
-newGame = execState dealOpeningHands testGame
+newGame :: Game -> IO Game
+newGame t = do
+    (_, game) <- runStateT playGame t
+    return game
 
 main :: IO ()
-main = print newGame
+main = do
+    finalGame <- newGame testGame
+    putStrLn ("Final Game: " ++ show finalGame)
