@@ -1,5 +1,4 @@
 import Deck
-import Types 
 import Game
 import Types
 import System.Random

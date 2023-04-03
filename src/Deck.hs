@@ -44,5 +44,3 @@ cardValue (Card face _) =
         Eight -> 8
         Nine  -> 9
         _     -> 10
-
-
