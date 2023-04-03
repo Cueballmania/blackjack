@@ -1,6 +1,7 @@
 import Deck
 import Types 
 import Game
+import Types
 import System.Random
 import Control.Monad.Trans.State
 
@@ -24,7 +25,7 @@ testPlayer2 = Player
     { playerName = "Josh"
     , hands = [[]]
     , bankroll = 100
-    , bet = [1,0,-1,23]
+    , bet = [1,23]
     }
 
 testGame :: Game
