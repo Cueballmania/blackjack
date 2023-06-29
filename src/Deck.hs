@@ -1,6 +1,6 @@
 module Deck where
 
-import System.Random
+import System.Random (StdGen, randomR)
 
 data Face = Ace | Two | Three | Four | Five | Six |
             Seven | Eight | Nine | Ten | Jack | Queen | King
