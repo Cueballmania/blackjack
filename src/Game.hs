@@ -40,64 +40,104 @@ handValue hs = if isSoft hs
 isBlackjack :: Hand -> Bool
 isBlackjack h = (handValue h == 21) && (length h == 2)
 
-drawN :: Int -> ([[Card]], Deck, Deck, StdGen) -> ([[Card]], Deck, Deck, StdGen)
-drawN 0 (c, dk, dc, g) = (c, dk, dc, g)
-drawN n (c, dk, dc, g) = drawN (n-1) (c ++ [[c']], dk', dc', g')
-    where
-    (c', (dk', dc', g')) = drawCard (dk, dc, g)
+dealCard :: State Game Card
+dealCard = do
+    gs <- get
+    case deck gs of
+        [] -> do
+            let (newDeck, newGen) = shuffle (discard gs) (gen gs)
+            put $ gs { deck = newDeck, discard = [], gen = newGen }
+            dealCard
+        (c:cs) -> do
+            put $ gs { deck = cs }
+            return c
 
-drawCard :: (Deck, Deck, StdGen) -> (Card, (Deck, Deck, StdGen))
-drawCard (c:d, discard, g) = (c, (d, discard, g))
-drawCard ([], discard, g)  = drawCard (newDeck, [], h)
-    where
-        (newDeck, h) = shuffle discard g
+dealToAllPlayers :: State Game ()
+dealToAllPlayers = do
+    gs <- get
+    let ps = players gs
+    ps' <- mapM dealToPlayer ps
+    put $ gs { players = ps' }
 
-dealToAllPlayers :: ([Player], Deck, Deck, StdGen) -> [Player] -> ([Player], Deck, Deck, StdGen)
-dealToAllPlayers (processedPlayers, dk, dc, g) []     = (processedPlayers, dk, dc, g)
-dealToAllPlayers (processedPlayers, dk, dc, g) (p:ps) =  dealToAllPlayers (processedPlayers ++ [p'], dk', dc', g') ps
-    where
-        (p', dk', dc', g') = dealToPlayer p (dk, dc, g)
+dealToPlayer :: Player -> State Game Player
+dealToPlayer p = do
+    let numHands = length $ bet p
+    newHands <- replicateM numHands $ replicateM dealCard
+    return $ if hands p == [[]]
+        then p { hands = newHands}
+        else p { hands = zipWith (++) (hands p) newHands}
 
-dealToPlayer :: Player -> (Deck, Deck, StdGen) ->  (Player, Deck, Deck, StdGen)
-dealToPlayer p (dk, dc, g) = (p', dk', dc', g')
-    where
-        numHands = length $ bet p
-        (newHands, dk', dc', g') = drawN numHands ([], dk, dc, g)
-        p' = if hands p == [[]]
-                then p { hands = newHands}
-                else p { hands = zipWith (++) (hands p) newHands}
+dealToDealer :: State Game ()
+dealToDealer = do
+    gs <- get
+    let d = dealer gs
+    card <- dealCard
+    return $ if length (hand d) == 1
+        then d { hiddenHand = [card] }
+        else d { hand = (hand d) ++ [card] }
 
-dealOpeningHands :: [Player] -> Dealer -> (Deck, Deck, StdGen) -> ([Player], Dealer, Deck, Deck, StdGen)
-dealOpeningHands ps d (deck, discard, gen) = 
-    let (firstCardPlayers, dk, dc, g) = dealToAllPlayers ([], deck, discard, gen) ps
-        (dealerCard, (dk', dc', g')) = drawCard (dk, dc, g)
-        (secondCardPlayers, dk'', dc'', g'') = dealToAllPlayers([], dk', dc', g') firstCardPlayers
-        (dealerHiddenCard, (dk''', dc''', g''')) = drawCard (dk'', dc'', g'')
-        newDealer = d {hand = [dealerCard], hiddenHand = [dealerHiddenCard] }       
-    in (secondCardPlayers, newDealer, dk''', dc''', g''')
+dealOpeningHands :: State Game ()
+dealOpeningHands = do
+    dealToAllPlayers
+    dealToDealer
+    dealToAllPlayer
+    dealToDealer
 
-processPlayer :: ([Player], Deck, Deck, StdGen) -> [Player] -> IO ([Player], Deck, Deck, StdGen)
-processPlayer (pList, dk, dc, g) []     = return (pList, dk, dc, g)
-processPlayer (pList, dk, dc, g) (p:ps) = do
-    let playerHands = hands p
-    let playerBets = bet p
-    let playerBankroll = bankroll p
-    let handsNBets = zip playerHands playerBets
-    ([(Hand, Money)], Deck, Deck, StdGen)
+-- Need a function to check to offer insurance
+-- Need a function that processes dealer blackjack
+    -- Pushes with player blackjack and wins all other bets
 
-processHand :: ([(Hand, Money)], Money, Deck, Deck, StdGen) -> [(Hand, Money)] 
-                -> IO ([(Hand, Money)], Money, Deck, Deck, StdGen)
-processHand (hnbList, br, dk, dc, g) []            = return (hnbList, br, dk, dc, g)
-processHand (hnbList, br, dk, dc, g) [(h, b):hnbs] = do
-    if isBlackjack h
-        then do
-            let bjPayout = bjPay b
-            putStrLn "Blackjack! Paying out" ++ show bjPayout
-            processHand ((h,0), br + bjPayout, dk, dc, g) hnbs
-        else do
-            let hasDoubleBet =  2 * b > br
-            let numHands = (length hnbList) + (length hnbs) + 1
-
+playerTurn :: Player -> GameT IO ()
+playerTurn p = do
+    liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn!"
+    hs <- gets (hands p)
+    bs <- gets (bet p)
+    br <- gets (bankroll p)
+    forM_ [1..length hs] $ \handNum -> do
+        liftIO $ putStrLn $ "Processing Hand " ++ show handNum
+        let hand = hs !! (handNum - 1)
+        -- Blackjack logic
+        if isBlackjack hand
+            then do
+                liftIO $ putStrLn "Blackjack!"
+                -- Offer the player to double down if possible
+                if canDoubleDown br bs hand
+                    then do
+                        liftIO $ putStrLn "You can double down. Would you like to? (y/n)"
+                        choice <- liftIO getLine
+                        if choice == "y"
+                            then do
+                                let doubledBet = 2 * (bs !! (handNum - 1))
+                                updatePlayerBet p handNum doubledBet
+                                dealToHand p handNum
+                            else payBlackjack p handNum
+                    else payBlackjack p handNum
+            else do
+                -- If the player can split, offer it
+                if canSplit bs hand
+                    then do
+                        liftIO $ putStrLn "You can split. Would you like to? (y/n)"
+                        choice <- liftIO getLine
+                        if choice == "y"
+                            then do
+                                splitHand p handNum
+                                playerTurn p -- Process each hand again with bets inserted
+                            else processNormalHand p handNum
+                    else do
+                        -- If the player can double down, offer it
+                        if canDoubleDown br bs hand
+                            then do
+                                liftIO $ putStrLn "You can double down. Would you like to? (y/n)"
+                                choice <- liftIO getLine
+                                if choice == "y"
+                                    then do
+                                        let doubledBet = 2 * (bs !! (handNum - 1))
+                                        updatePlayerBet p handNum doubledBet
+                                        dealToHand p handNum
+                                    else processNormalHand p handNum
+                            else do
+                                -- Offer to hit or stand until the total is over 21
+                                processNormalHand p handNum
 
 allSame :: Eq a => [a] -> Bool
 allSame xs = null xs || all (== head xs) (tail xs)
