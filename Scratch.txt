@@ -1,0 +1,57 @@
+playerTurn :: Player -> GameT IO ()
+playerTurn p = do
+    liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn!"
+    hs <- gets (hands . getPlayerState p)
+    bs <- gets (bet . getPlayerState p)
+    br <- gets (bankroll . getPlayerState p)
+    processHandsRecursive p hs bs 1
+
+processHandsRecursive :: Player -> [Hand] -> [Bet] -> Int -> GameT IO ()
+processHandsRecursive _ [] _ _ = return () -- No more hands to process
+processHandsRecursive p (hand:hs) (bet:bs) handNum = do
+    liftIO $ putStrLn $ "Processing Hand " ++ show handNum
+    let isBlackjack = isBlackjackHand hand
+
+    if isBlackjack && length hand == 2 && handValue hand == 21
+      then do
+        liftIO $ putStrLn "Blackjack!"
+        -- Handle blackjack logic here
+      else do
+        liftIO $ putStrLn "Not a blackjack."
+
+    -- Process the current hand
+    processHand p hand bet
+
+    -- Process the remaining hands
+    processHandsRecursive p hs bs (handNum + 1)
+
+processHand :: Player -> Hand -> Bet -> GameT IO ()
+processHand p hand bet = do
+    let canSplit = isSplitAllowed hand
+    if canSplit
+      then do
+        liftIO $ putStrLn "You can split this hand."
+        liftIO $ putStrLn "Do you want to split? (y/n)"
+        choice <- liftIO getLine
+        if choice == "y"
+          then do
+            let (card1:card2:rest) = hand
+                newHand1 = [card1]
+                newHand2 = [card2]
+                newBet1 = bet
+                newBet2 = bet
+                newHands = newHand1 : newHand2 : rest
+                newBets = newBet1 : newBet2 : bs
+            -- Process the first split hand
+            processHand p newHand1 newBet1
+            -- Recursively process the remaining split hands
+            processHandsRecursive p [newHand2] [newBet2] handNum
+          else do
+            liftIO $ putStrLn "No split. Continuing with the next hand."
+            -- Handle other options (double down, hit, stand) for the current hand
+            -- ...
+
+      else do
+        liftIO $ putStrLn "Split not allowed. Continuing with the next hand."
+        -- Handle other options (double down, hit, stand) for the current hand
+        -- ...
