@@ -64,8 +64,8 @@ dealToPlayer p = do
     let numHands = length $ bet p
     newHands <- replicateM numHands $ replicateM dealCard
     return $ if hands p == [[]]
-        then p { hands = newHands}
-        else p { hands = zipWith (++) (hands p) newHands}
+        then put $ p { hands = newHands}
+        else put $ p { hands = zipWith (++) (hands p) newHands}
 
 dealToDealer :: State Game ()
 dealToDealer = do
@@ -87,119 +87,80 @@ dealOpeningHands = do
 -- Need a function that processes dealer blackjack
     -- Pushes with player blackjack and wins all other bets
 
-playerTurn :: Player -> GameT IO ()
-playerTurn p = do
-    liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn!"
-    hs <- gets (hands p)
-    bs <- gets (bet p)
-    br <- gets (bankroll p)
-    forM_ [1..length hs] $ \handNum -> do
-        liftIO $ putStrLn $ "Processing Hand " ++ show handNum
-        let hand = hs !! (handNum - 1)
-        -- Blackjack logic
-        if isBlackjack hand
-            then do
-                liftIO $ putStrLn "Blackjack!"
-                -- Offer the player to double down if possible
-                if canDoubleDown br bs hand
-                    then do
-                        liftIO $ putStrLn "You can double down. Would you like to? (y/n)"
-                        choice <- liftIO getLine
-                        if choice == "y"
-                            then do
-                                let doubledBet = 2 * (bs !! (handNum - 1))
-                                updatePlayerBet p handNum doubledBet
-                                dealToHand p handNum
-                            else payBlackjack p handNum
-                    else payBlackjack p handNum
-            else do
-                -- If the player can split, offer it
-                if canSplit bs hand
-                    then do
-                        liftIO $ putStrLn "You can split. Would you like to? (y/n)"
-                        choice <- liftIO getLine
-                        if choice == "y"
-                            then do
-                                splitHand p handNum
-                                playerTurn p -- Process each hand again with bets inserted
-                            else processNormalHand p handNum
-                    else do
-                        -- If the player can double down, offer it
-                        if canDoubleDown br bs hand
-                            then do
-                                liftIO $ putStrLn "You can double down. Would you like to? (y/n)"
-                                choice <- liftIO getLine
-                                if choice == "y"
-                                    then do
-                                        let doubledBet = 2 * (bs !! (handNum - 1))
-                                        updatePlayerBet p handNum doubledBet
-                                        dealToHand p handNum
-                                    else processNormalHand p handNum
-                            else do
-                                -- Offer to hit or stand until the total is over 21
-                                processNormalHand p handNum
+processPlayer :: Player -> GameT IO ()
+processPlayer p = do
+     hs <- (hands p)
+     bs <- (bets p)
+     br <- (bankroll p)
+     liftIO $ putStrLn $ show (name p) ++ " is playing " ++ show (length (hands p)) ++ " hands."
+     newHands, newBets, newBankroll <- processHands hs bs br
+     put $ p {hands = newHands, bets = newBets, bankroll = newBankroll}
 
+processHands :: [Hand] -> [Money] -> Money -> GameT IO ([Hand], [Money], Money)
+processHands hs bs br = do
+
+processHand :: Hand -> Money -> Money -> Bool -> GameT IO ([Hand], [Money], Money)
+processHand h b br canBJ = do
+     if (isBlackjack h && canBJ)
+        then do
+             liftIO $ putStrLn "Blackjack!"
+        else do
+             liftIO $ putStrLn "Not a blackjack."
+     if (canSplit h b br)
+        then do
+              liftIO $ putStrLn "You can split this hand."
+              liftIO $ putStrLn "Do you want to split? (y/n)"
+              choice <- liftIO getLine
+              if choice == "y"
+                 then do
+                      let (card1:card2) = h
+                          smallerBr = br - bet
+                      newCard <- dealCard
+                      newHands, newBets, newBr <- processHand (card1:newCard) b smallerBr False
+                      newCard2 <- dealCard
+                      newHands2, newBets2, newBr2 <- processHand (card2:newCard2) b newBr False
+                      return (newHands:newHands2) (newBets:newBets2) newBr2
+                 else do
+                      canDoubleHand h b br
+          else do
+               canDoubleHand h b br
+
+canDoubleHand :: Hand -> Money -> Money -> GameT IO ([Hand], [Money], Money)
+canDoubleHand h b br = do
+      if (canDouble h b br)
+          then do
+              liftIO $ putStrLn "You can double this hand."
+              liftIO $ putStrLn "Do you want to double? (y/n)"
+              choice <- liftIO getLine
+              if choice == "y"
+                 then do
+                      let smallerBr = br - bet
+                      newCard <- dealCard
+                      return [h:newCard] [b] smallerBr
+                 else do
+                      newHand <- processHitStand h
+                      return [newHand] [b] br
+          else do
+               newHand <- processHitStand h
+               return [newHand] [b] br
+
+processHitStand :: Hand -> GameT IO Hand
+processHitStand h = do
+      if (handValue > 21)
+         then do
+              liftIO $ putStrLn "You busted"
+              return h
+         else do
+              liftIO $ putStrLn "Would you like to hit?"
+              if choice == "y"
+                 then do
+                      card <- drawCard
+                      processHitStand (h:card)
+                 else do
+                      liftIO $ putStrLn "You stand"
+                      return h
 allSame :: Eq a => [a] -> Bool
 allSame xs = null xs || all (== head xs) (tail xs)
-
-handActions :: Hand -> Bool -> Int -> [Action]
-handActions h dbBet nHands = 
-        | cs == True && dbBet == True && canSplit == True   = [Hit, Stand, Double, Split]
-        | cs == True && dbBet == True && canSplit == False  = [Hit, Stand, Double]
-        | otherwise                                         = [Hit, Stand]
-        where
-            cs = length h == 2
-            canSplit = dbBet && allSame $ map carValue h
-
-
-runHand :: Hand -> Bool -> Int -> IO ()
-runHand h dbBet nHands = do
-  let actions = handActions h dbBet nHands
-  let prompt = buildPrompt actions
-  putStr prompt
-  input <- getLine
-  case input of
-    "H" -> if Hit `elem` actions
-           then putStrLn "Player hits."
-           else invalidInput
-    "S" -> if Stand `elem` actions
-           then putStrLn "Player stands."
-           else invalidInput
-    "D" -> if Double `elem` actions
-           then putStrLn "Player doubles down."
-           else invalidInput
-    "P" -> if Split `elem` actions
-           then putStrLn "Player splits."
-           else invalidInput
-    _ -> invalidInput
-  where
-    buildPrompt actions = "Enter an action (" ++ buildOptions actions ++ "): "
-    buildOptions actions = buildOption 'H' "hit" actions ++ buildOption 'S' "stand" actions ++
-                           buildOption 'D' "double down" actions ++ buildOption 'P' "split" actions
-    buildOption key name actions
-      | elem key ['H','S'] = if elem key actions then [key] ++ " for " ++ name ++ ", " else ""
-      | otherwise = if elem key actions then [key] ++ " for " ++ name else ""
-
-    invalidInput = do
-      putStrLn "Invalid input."
-      runHand h dbBet nHands
-
-runHand :: Hand -> Bool -> Int -> IO ()
-runHand h dbBet nHands = do
-  let actions = handActions h dbBet nHands
-  let prompt = "Enter an action (H for hit, S for stand, D for double down, P for split): "
-  putStr prompt
-  input <- getLine
-  case input of
-    "H" -> putStrLn "Player hits."
-    "S" -> putStrLn "Player stands."
-    "D" -> if Double `elem` actions
-           then putStrLn "Player doubles down."
-           else putStrLn "This action is not allowed."
-    "P" -> if Split `elem` actions
-           then putStrLn "Player splits."
-           else putStrLn "This action is not allowed."
-    _ -> putStrLn "Invalid input."
 
 bjPay :: Money -> Money
 bjPay b = floor(1.5*b)
