@@ -97,7 +97,11 @@ processPlayer p = do
     put $ p {hands = newHands, bets = newBets, bankroll = newBankroll}
 
 processHands :: [Hand] -> [Money] -> Money -> GameT IO ([Hand], [Money], Money)
-processHands hs bs br = do
+processHands [] bs br = return ([], bs, br)
+processHands (h:hs) (b:bs) br = do
+    (newHand, newBet, newBankroll) <- processHand h b br True
+    (remainingHands, remainingBets, remainingBankroll) <- processHands hs bs newBankroll
+    return (newHand : remainingHands, newBet : remainingBets, remainingBankroll)
 
 processHand :: Hand -> Money -> Money -> Bool -> GameT IO ([Hand], [Money], Money)
 processHand h b br canBJ = do
