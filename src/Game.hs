@@ -134,7 +134,33 @@ processDealerBlackjack = do
     if (dealerBlackjack d)
         then do
             liftIO $ putStrLn "Dealer has blackjack."
-            
+            -- Dealer has blackjack so for each player, every hand is checked for blackjack
+            -- If the hand is not a blackjack, the bet is lost and the cards are taken
+            -- If the hand is blackjack then the bet is returned to the player
+            newPlayers <- forM ps $ \p -> do
+                let hs = hands p
+                    bs = bets p
+                    br = bankroll p
+                (newHands, newBets, newBankroll) <- checkForBlackjack hs bs br
+                return $ p { hands = newHands, bets = newBets, bankroll = newBankroll }
+        else do
+            return ()
+
+-- Function checks each hand and bet combination
+-- If the hand is blackjack, the bet is added to the bankroll and output is "Push"
+-- If the hand is not blackjack, the bet is lost and output is "Loss"
+checkForBlackjack :: [Hand] -> [Money] -> Money -> GameT IO Money
+checkForBlackjack hs bs br = do
+    br <- foldM (\(h, b, br) -> \acc -> do
+        if (isBlackjack h)
+            then do
+                liftIO $ putStrLn "Blackjack -- Push"
+                let newBankroll = br + b
+                return (h, b, newBankroll)
+            else do
+                liftIO $ putStrLn "Not a blackjack -- Loss"
+                return (h, b, br)
+    ) (hs, bs, br) (zip hs bs)
 
 processPlayer :: Player -> GameT IO ()
 processPlayer p = do
