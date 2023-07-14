@@ -20,7 +20,8 @@ type Hand = [Card]
 data Player = Player { playerName :: String
                      , hands      :: [Hand]
                      , bankroll   :: Money
-                     , bet        :: [Money] }
+                     , bet        :: [Money]
+                     , insurance  :: Money }
 
 data Dealer = Dealer { dealerName :: String
                      , hand       :: Hand
@@ -30,7 +31,7 @@ data Dealer = Dealer { dealerName :: String
 
 
 instance Show Player where
-    show (Player name hs br bs) = "Player: " ++ name ++
+    show (Player name hs br bs _) = "Player: " ++ name ++
                                   "\nHands: " ++ show hs ++
                                   "\nBets: " ++ show bs ++
                                   "\nBankroll: " ++ show br

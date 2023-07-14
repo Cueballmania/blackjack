@@ -83,9 +83,58 @@ dealOpeningHands = do
     dealToAllPlayer
     dealToDealer
 
--- Need a function to check to offer insurance
--- Need a function that processes dealer blackjack
-    -- Pushes with player blackjack and wins all other bets
+processInsurance :: GameT IO ()
+processInsurance = do
+    gs <- get
+    let ps = players gs
+        d = dealer gs
+    if (cardValue head (hand d) == 1)
+        then do
+            -- Offer insurance bet to each player
+            -- Collect the players who chose to bet insurance
+            -- Resolve insurance bets
+            -- Resolve dealer blackjack
+            newPlayers <- forM ps $ \p -> do
+                liftIO $ putStrLn $ "Player " ++ show (name p) ++ ", would you like to bet insurance? (y/n)"
+                choice <- liftIO getLine
+                if choice == "y"
+                    then do
+                        let maxBet = maximum (sum (bets p) * 0.5, bankroll p)
+                        liftIO $ putStrLn $ "You can bet up to " ++ show maxBet ++ ". How much would you like to bet?"
+                        bet <- liftIO getLine
+                        if read bet > maxBet
+                            then do 
+                                let newBankroll = (bankroll p) - maxBet
+                                let newInsurance = maxBet
+                                return $ p { bankroll = newBankroll, insurance = newInsurance }
+                            else do
+                                let newBankroll = (bankroll p) - bet
+                                let newInsurance = bet
+                                return $ p { bankroll = newBankroll, insurance = newInsurance }
+                    else do
+                        return p
+            if (cardValue head (hiddenHand d) == 10)
+                then do
+                    liftIO $ putStrLn "Dealer has blackjack. Insurance bets win."
+                    let newPlayers' = map (\p -> p { bankroll = (bankroll p) + 2*(insurance p), insurance = 0 }) newPlayers
+                    put $ gs { players = newPlayers' }
+                else do
+                    liftIO $ putStrLn "Dealer does not have blackjack. Insurance bets lose."
+                    let newPlayers' = map (\p -> p { insurance = 0 }) newPlayers
+                    put $ gs { players = newPlayers'}
+        else do
+            liftIO $ putStrLn "Dealer does not have an Ace. No insurance bets."
+            return ()
+
+processDealerBlackjack :: GameT IO ()
+processDealerBlackjack = do
+    gs <- get
+    let ps = players gs
+        d = dealer gs
+    if (dealerBlackjack d)
+        then do
+            liftIO $ putStrLn "Dealer has blackjack."
+            
 
 processPlayer :: Player -> GameT IO ()
 processPlayer p = do
