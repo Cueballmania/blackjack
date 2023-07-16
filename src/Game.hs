@@ -116,7 +116,7 @@ processInsurance = do
             if (cardValue head (hiddenHand d) == 10)
                 then do
                     liftIO $ putStrLn "Dealer has blackjack. Insurance bets win."
-                    let newPlayers' = map (\p -> p { bankroll = (bankroll p) + 2*(insurance p), insurance = 0 }) newPlayers
+                    let newPlayers' = map (\p -> p { bankroll = (bankroll p) + 3*(insurance p), insurance = 0 }) newPlayers
                     put $ gs { players = newPlayers' }
                 else do
                     liftIO $ putStrLn "Dealer does not have blackjack. Insurance bets lose."
