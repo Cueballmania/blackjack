@@ -6,6 +6,7 @@ import Bets
 import System.Random
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad (replicateM)
 
 printTableValue :: [Card] -> IO ()
 printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
@@ -141,26 +142,40 @@ processDealerBlackjack = do
                 let hs = hands p
                     bs = bets p
                     br = bankroll p
-                (newHands, newBets, newBankroll) <- checkForBlackjack hs bs br
-                return $ p { hands = newHands, bets = newBets, bankroll = newBankroll }
+                newBankroll <- checkForBlackjack hs bs br
+                return $ p { bet = replicate (length bs) 0, bankroll = newBankroll }
+            put $ gs { players = newPlayers }
+            cleanupHands
         else do
             return ()
 
 -- Function checks each hand and bet combination
 -- If the hand is blackjack, the bet is added to the bankroll and output is "Push"
 -- If the hand is not blackjack, the bet is lost and output is "Loss"
+-- Returns the updated bankroll
 checkForBlackjack :: [Hand] -> [Money] -> Money -> GameT IO Money
-checkForBlackjack hs bs br = do
-    br <- foldM (\(h, b, br) -> \acc -> do
-        if (isBlackjack h)
-            then do
-                liftIO $ putStrLn "Blackjack -- Push"
-                let newBankroll = br + b
-                return (h, b, newBankroll)
-            else do
-                liftIO $ putStrLn "Not a blackjack -- Loss"
-                return (h, b, br)
-    ) (hs, bs, br) (zip hs bs)
+checkForBlackjack [] [] br = return br
+checkForBlackjack (h:hs) (b:bs) br = do
+    if (isBlackjack h)
+        then do
+            liftIO $ putStrLn "Push"
+            let newBankroll = br + b
+            checkForBlackjack hs bs newBankroll
+        else do
+            liftIO $ putStrLn "Loss"
+            let newBankroll = br
+            checkForBlackjack hs bs newBankroll
+
+cleanupHands :: GameT IO ()
+cleanupHands = do
+    gs <- get
+    let ps = players gs
+        d = dealer gs
+        dh = hiddenHand d
+        discardPile = concatMap handCards (dh : hand d : map head (map hands ps))
+    put $ gs { dealer = d { hand = [], hiddenHand = [] },
+               players = map (\p -> p { hands = [[]], bet = [], insurance = 0 }) ps,
+               discard = discardPile ++ discard gs }
 
 processPlayer :: Player -> GameT IO ()
 processPlayer p = do
@@ -169,7 +184,7 @@ processPlayer p = do
     br <- (bankroll p)
     liftIO $ putStrLn $ show (name p) ++ " is playing " ++ show (length (hands p)) ++ " hands."
     (newHands, newBets, newBankroll) <- processHands hs bs br
-    put $ p {hands = newHands, bets = newBets, bankroll = newBankroll}
+    put $ p {hands = newHands, bet = newBets, bankroll = newBankroll}
 
 processHands :: [Hand] -> [Money] -> Money -> GameT IO ([Hand], [Money], Money)
 processHands [] bs br = return ([], bs, br)
@@ -245,89 +260,3 @@ allSame xs = null xs || all (== head xs) (tail xs)
 bjPay :: Money -> Money
 bjPay b = floor(1.5*b)
 
-playGame :: GameT IO ()
-playGame = do
-    game <- get
-    playerWBets <- liftIO $ getBets (players game)
-    let dealer' = dealer game
-    let (playerInitial, dealerInitial, dk, dc, g) = dealOpeningHands playerWBets dealer' (deck game, discard game, gen game)
-    let game' = game { players = playerInitial, dealer = dealerInitial, deck = dk, discard = dc, gen = g }
-    put game'
-    -- iterate through each player and process each hand in order
-    (players', dk', dc', g') <- foldM (\(ps, dkAcc, dcAcc, gAcc) player -> do
-        let numPlayerHands = numHands player
-        (player', newHands, dk', dc', g') <- foldM (\(p, newHandsAcc, dkAcc', dcAcc', gAcc') handIndex -> do
-        (p', newHands', dk'', dc'', g'') <- processPlayerHand p handIndex (dkAcc', dcAcc', gAcc')
-        let numNewHands = length newHands'
-        let newHandsIndex = handIndex + numNewHands
-        let p'' = if numNewHands > 0 then p' { numHands = numPlayerHands + numNewHands } else p'
-        let p''' = foldr (\hand acc -> acc { hands = insertAtIndex handIndex hand (hands acc) }) p'' newHands'
-        let newHandsAcc' = newHandsAcc ++ newHands'
-        return (p''', newHandsAcc', dk'', dc'', g'')
-    ) (player, [], dkAcc, dcAcc, gAcc) [0..(numPlayerHands - 1)]
-    -- cleanup bets
-    -- deal opening hands
-    -- if Ace/Ten, ask for insurance bets
-        -- check for dealer 21
-        -- resolve bets if 21
-    -- for each player
-        -- process each hand in order
-        -- for each hand, if it's a blackjack, tell them and pay them the payout rate
-        -- if not, ask if they want to hit, stand, double (if they have enough money) or 
-            -- split (if the two cards have the same numerical value and they have enough money and the number of hands is less than 4)
-        -- if they split, take the second card and make a new hand after the previous, debt their account and add the bet
-            -- deal the current hand another card and repeat
-            -- a two-card 21 is not a blackjack and pays 1:1
-        -- if they double down, double their bet, debt the account and give them one card and stop prompts for the hand
-        -- if they hit, give them another card and repeat
-        -- if they stand, move to the next hand
-        -- if anytime the player's hand totals more than 21, immediate take the bet and move the cards to the discard pile
-    -- the dealer then moves the hidden card to their hand and continues to hit until the stopping criteria
-    -- all remaining bets are resolved (push = money goes back, win = double money, loss = clearing of bets)
-    -- move all cards to the discard pile
-    -- if the size of the deck is less than the penetration size, shuffle all cards
-        -- reset the cut card
-    -- if at anytime the deck runs out, shuffle the discards
-
-playGame :: GameT IO ()
-playGame = do
-    game <- get
-    playerWBets <- liftIO $ getBets (players game)
-    let dealer' = dealer game
-    let (playerInitial, dealerInitial, dk, dc, g) = dealOpeningHands playerWBets dealer' (deck game, discard game, gen game)
-    let game' = game { players = playerInitial, dealer = dealerInitial, deck = dk, discard = dc, gen = g }
-    put game'
-    let numPlayers = length playerInitial
-    let numHandsPerPlayer = maximum (map numHands playerInitial)
-    let allHands = [(i, j) | i <- [0..(numPlayers - 1)], j <- [0..(numHandsPerPlayer - 1)]]
-    (players', dk', dc', g') <- foldM (\(ps, dkAcc, dcAcc, gAcc) (playerIndex, handIndex) -> do
-        let player = ps !! playerIndex
-        let numPlayerHands = numHands player
-        (player', newHands, dk', dc', g') <- foldM (\(p, newHandsAcc, dkAcc', dcAcc', gAcc') handIndex' -> do
-            (p', newHands', dk'', dc'', g'') <- processPlayerHand p handIndex' (dkAcc', dcAcc', gAcc')
-            let numNewHands = length newHands'
-            let newHandsIndex = handIndex' + numNewHands
-            let p'' = if numNewHands > 0 then p' { numHands = numPlayerHands + numNewHands } else p'
-            let p''' = foldr (\hand acc -> acc { hands = insertAtIndex handIndex' hand (hands acc) }) p'' newHands'
-            let newHandsAcc' = newHandsAcc ++ newHands'
-            return (p''', newHandsAcc', dk'', dc'', g'')
-        ) (player, [], dkAcc, dcAcc, gAcc) [handIndex]
-        let ps' = insertAtIndex playerIndex player' ps
-        let newHands' = filter (\hand -> fst hand == playerIndex && snd hand > handIndex) newHands
-        let allHands' = [(i, j) | i <- [0..(numPlayers - 1)], j <- [0..(numHandsPerPlayer - 1)], i /= playerIndex || j >= newHandsIndex]
-        let allHands'' = foldr (\hand acc -> if fst hand == playerIndex && snd hand >= newHandsIndex then acc else hand:acc) allHands' newHands
-        return (ps', dk', dc', g')
-    ) (playerInitial, dk, dc, g) allHands
-    let dealerHand = hand (dealerInitial { hands = [playDealerHand (dk', dc', g') (hand dealerInitial)] })
-    let dealerFinalScore = score dealerHand
-    putStrLn $ "Dealer's final hand: " ++ show dealerHand ++ " (" ++ show dealerFinalScore ++ ")"
-    mapM_ (processPlayerResult dealerFinalScore) players'
-    where
-        processPlayerResult :: Int -> Player -> IO ()
-        processPlayerResult dealerFinalScore player = do
-            let pid' = pid player
-            let playerHands = hands player
-            mapM_ (processHandResult pid' dealerFinalScore) playerHands
-
-        processHandResult :: Int -> Int -> Hand -> IO ()
-        processHandResult pid' dealerFinalScore playerHand = do
