@@ -1,12 +1,13 @@
 module Game where
 
-import Deck 
+import Deck
 import Types
 import Bets
 import System.Random
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, forM)
+import Control.Exception (bracket)
 
 printTableValue :: [Card] -> IO ()
 printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
@@ -34,12 +35,15 @@ isSoft :: Hand -> Bool
 isSoft hs =  (handSum hs + 10 <= 21) && hasAce hs
 
 handValue :: Hand -> Int
-handValue hs = if isSoft hs 
+handValue hs = if isSoft hs
                     then handSum hs + 10
-               else handSum hs
+                    else handSum hs
 
 isBlackjack :: Hand -> Bool
 isBlackjack h = (handValue h == 21) && (length h == 2)
+
+dealerBlackjack :: Dealer -> Bool
+dealerBlackjack d = isBlackjack $ hand d ++ hiddenHand d
 
 dealCard :: State Game Card
 dealCard = do
@@ -63,25 +67,26 @@ dealToAllPlayers = do
 dealToPlayer :: Player -> State Game Player
 dealToPlayer p = do
     let numHands = length $ bet p
-    newHands <- replicateM numHands $ replicateM dealCard
+    newHands <- replicateM numHands $ replicateM 1 dealCard
     return $ if hands p == [[]]
-        then put $ p { hands = newHands}
-        else put $ p { hands = zipWith (++) (hands p) newHands}
+        then  p { hands = newHands}
+        else  p { hands = zipWith (++) (hands p) newHands}
 
 dealToDealer :: State Game ()
 dealToDealer = do
     gs <- get
     let d = dealer gs
     card <- dealCard
-    return $ if length (hand d) == 1
-        then d { hiddenHand = [card] }
-        else d { hand = (hand d) ++ [card] }
+    if length (hand d) == 1
+        then put $ gs {dealer = d { hiddenHand = [card] }}
+        else put $ gs {dealer = d { hand = hand d ++ [card] }}
+    return ()
 
 dealOpeningHands :: State Game ()
 dealOpeningHands = do
     dealToAllPlayers
     dealToDealer
-    dealToAllPlayer
+    dealToAllPlayers
     dealToDealer
 
 processInsurance :: GameT IO ()
@@ -89,35 +94,35 @@ processInsurance = do
     gs <- get
     let ps = players gs
         d = dealer gs
-    if (cardValue head (hand d) == 1)
+    if cardValue (head (hand d)) == 1
         then do
             -- Offer insurance bet to each player
             -- Collect the players who chose to bet insurance
             -- Resolve insurance bets
             -- Resolve dealer blackjack
             newPlayers <- forM ps $ \p -> do
-                liftIO $ putStrLn $ "Player " ++ show (name p) ++ ", would you like to bet insurance? (y/n)"
+                liftIO $ putStrLn $ "Player " ++ show (playerName p) ++ ", would you like to bet insurance? (y/n)"
                 choice <- liftIO getLine
                 if choice == "y"
                     then do
-                        let maxBet = maximum (sum (bets p) * 0.5, bankroll p)
+                        let maxBet = max (sum (bet p) * 0.5) (bankroll p)
                         liftIO $ putStrLn $ "You can bet up to " ++ show maxBet ++ ". How much would you like to bet?"
                         bet <- liftIO getLine
                         if read bet > maxBet
-                            then do 
-                                let newBankroll = (bankroll p) - maxBet
+                            then do
+                                let newBankroll = bankroll p - maxBet
                                 let newInsurance = maxBet
                                 return $ p { bankroll = newBankroll, insurance = newInsurance }
                             else do
-                                let newBankroll = (bankroll p) - bet
-                                let newInsurance = bet
+                                let newBankroll = bankroll p - read bet
+                                let newInsurance = read bet
                                 return $ p { bankroll = newBankroll, insurance = newInsurance }
                     else do
                         return p
-            if (cardValue head (hiddenHand d) == 10)
+            if cardValue (head (hiddenHand d)) == 10
                 then do
                     liftIO $ putStrLn "Dealer has blackjack. Insurance bets win."
-                    let newPlayers' = map (\p -> p { bankroll = (bankroll p) + 3*(insurance p), insurance = 0 }) newPlayers
+                    let newPlayers' = map (\p -> p { bankroll = bankroll p+ 3 * insurance p, insurance = 0 }) newPlayers
                     put $ gs { players = newPlayers' }
                 else do
                     liftIO $ putStrLn "Dealer does not have blackjack. Insurance bets lose."
@@ -132,7 +137,7 @@ processDealerBlackjack = do
     gs <- get
     let ps = players gs
         d = dealer gs
-    if (dealerBlackjack d)
+    if dealerBlackjack d
         then do
             liftIO $ putStrLn "Dealer has blackjack."
             -- Dealer has blackjack so for each player, every hand is checked for blackjack
@@ -140,7 +145,7 @@ processDealerBlackjack = do
             -- If the hand is blackjack then the bet is returned to the player
             newPlayers <- forM ps $ \p -> do
                 let hs = hands p
-                    bs = bets p
+                    bs = bet p
                     br = bankroll p
                 newBankroll <- checkForBlackjack hs bs br
                 return $ p { bet = replicate (length bs) 0, bankroll = newBankroll }
@@ -154,9 +159,8 @@ processDealerBlackjack = do
 -- If the hand is not blackjack, the bet is lost and output is "Loss"
 -- Returns the updated bankroll
 checkForBlackjack :: [Hand] -> [Money] -> Money -> GameT IO Money
-checkForBlackjack [] [] br = return br
 checkForBlackjack (h:hs) (b:bs) br = do
-    if (isBlackjack h)
+    if isBlackjack h
         then do
             liftIO $ putStrLn "Push"
             let newBankroll = br + b
@@ -165,6 +169,7 @@ checkForBlackjack (h:hs) (b:bs) br = do
             liftIO $ putStrLn "Loss"
             let newBankroll = br
             checkForBlackjack hs bs newBankroll
+checkForBlackjack _ _ br = return br
 
 cleanupHands :: GameT IO ()
 cleanupHands = do
@@ -172,19 +177,20 @@ cleanupHands = do
     let ps = players gs
         d = dealer gs
         dh = hiddenHand d
-        discardPile = concatMap handCards (dh : hand d : map head (map hands ps))
+        discardPile = discard gs ++ hand d ++ hiddenHand d + concatMap (concat . hands) ps
     put $ gs { dealer = d { hand = [], hiddenHand = [] },
                players = map (\p -> p { hands = [[]], bet = [], insurance = 0 }) ps,
                discard = discardPile ++ discard gs }
 
 processPlayer :: Player -> GameT IO ()
 processPlayer p = do
-    hs <- (hands p)
-    bs <- (bets p)
-    br <- (bankroll p)
-    liftIO $ putStrLn $ show (name p) ++ " is playing " ++ show (length (hands p)) ++ " hands."
+    hs <- hands p
+    bs <- bets p
+    br <- bankroll p
+    liftIO $ putStrLn $ show (playerName p) ++ " is playing " ++ show (length (hands p)) ++ " hands."
     (newHands, newBets, newBankroll) <- processHands hs bs br
     put $ p {hands = newHands, bet = newBets, bankroll = newBankroll}
+    return ()
 
 processHands :: [Hand] -> [Money] -> Money -> GameT IO ([Hand], [Money], Money)
 processHands [] bs br = return ([], bs, br)
@@ -258,5 +264,5 @@ allSame :: Eq a => [a] -> Bool
 allSame xs = null xs || all (== head xs) (tail xs)
 
 bjPay :: Money -> Money
-bjPay b = floor(1.5*b)
+bjPay b = floor (1.5*b)
 
