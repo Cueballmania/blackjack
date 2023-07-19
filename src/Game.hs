@@ -7,7 +7,7 @@ import System.Random
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad (replicateM, forM)
-import Control.Exception (bracket)
+import Control.Monad.Trans.Class (lift)
 
 printTableValue :: [Card] -> IO ()
 printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
@@ -182,31 +182,31 @@ cleanupHands = do
                players = map (\p -> p { hands = [[]], bet = [], insurance = 0 }) ps,
                discard = discardPile ++ discard gs }
 
-processPlayer :: Player -> GameT IO ()
+processPlayer :: Player -> GameT IO Player
 processPlayer p = do
-    hs <- hands p
-    bs <- bets p
-    br <- bankroll p
+    let hs = hands p
+        bs = bet p
+        br = bankroll p
     liftIO $ putStrLn $ show (playerName p) ++ " is playing " ++ show (length (hands p)) ++ " hands."
     (newHands, newBets, newBankroll) <- processHands hs bs br
-    put $ p {hands = newHands, bet = newBets, bankroll = newBankroll}
-    return ()
+    return p {hands = newHands, bet = newBets, bankroll = newBankroll}
 
 processHands :: [Hand] -> [Money] -> Money -> GameT IO ([Hand], [Money], Money)
-processHands [] bs br = return ([], bs, br)
+processHands [] _ br = return ([], [], br)
 processHands (h:hs) (b:bs) br = do
     (newHand, newBet, newBankroll) <- processHand h b br True
     (remainingHands, remainingBets, remainingBankroll) <- processHands hs bs newBankroll
-    return (newHand : remainingHands, newBet : remainingBets, remainingBankroll)
+    return (newHand ++ remainingHands, newBet ++ remainingBets, remainingBankroll)
+processHands _ _ _ = return ([], [], 0)
 
 processHand :: Hand -> Money -> Money -> Bool -> GameT IO ([Hand], [Money], Money)
 processHand h b br canBJ = do
-    if (isBlackjack h && canBJ)
+    if isBlackjack h && canBJ
         then do
             liftIO $ putStrLn "Blackjack!"
         else do
             liftIO $ putStrLn "Not a blackjack."
-    if (canSplit h b br)
+    if canSplit h b br
         then do
             liftIO $ putStrLn "You can split this hand."
             liftIO $ putStrLn "Do you want to split? (y/n)"
@@ -214,10 +214,10 @@ processHand h b br canBJ = do
             if choice == "y"
                 then do
                     let (card1:card2) = h
-                        smallerBr = br - bet
-                    newCard <- dealCard
+                        smallerBr = br - b
+                    newCard <- lift dealCard
                     (newHands, newBets, newBr) <- processHand (card1:newCard) b smallerBr False
-                    newCard2 <- dealCard
+                    newCard2 <- lift dealCard
                     (newHands2, newBets2, newBr2) <- processHand (card2:newCard2) b newBr False
                     return (newHands:newHands2) (newBets:newBets2) newBr2
                 else do
@@ -225,17 +225,22 @@ processHand h b br canBJ = do
         else do
             canDoubleHand h b br
 
+
+canSplit :: Hand -> Money -> Money -> Bool
+canSplit h b br =
+    length h == 2 && cardValue (head h) == cardValue (last h) && b <= br
+
 canDoubleHand :: Hand -> Money -> Money -> GameT IO ([Hand], [Money], Money)
 canDoubleHand h b br = do
-    if (canDouble h b br)
+    if canDouble h b br
         then do
             liftIO $ putStrLn "You can double this hand."
             liftIO $ putStrLn "Do you want to double? (y/n)"
             choice <- liftIO getLine
             if choice == "y"
                 then do
-                    let smallerBr = br - bet
-                    newCard <- dealCard
+                    let smallerBr = br - b
+                    newCard <- lift dealCard
                     return [h:newCard] [b] smallerBr
                 else do
                     newHand <- processHitStand h
@@ -244,6 +249,10 @@ canDoubleHand h b br = do
             newHand <- processHitStand h
             return [newHand] [b] br
 
+canDouble :: Hand -> Money -> Money -> Bool
+canDouble h b br =
+    length h == 2 && handSum h `elem` [10, 11] && b <= br
+
 processHitStand :: Hand -> GameT IO Hand
 processHitStand h = do
     if (handValue > 21)
@@ -251,11 +260,12 @@ processHitStand h = do
             liftIO $ putStrLn "You busted"
             return h
         else do
-            liftIO $ putStrLn "Would you like to hit?"
+            liftIO $ putStrLn "Would you like to hit? (y/n)"
+            choice <- liftIO getLine
             if choice == "y"
                 then do
-                    card <- drawCard
-                    processHitStand (h:card)
+                    card <- lift drawCard
+                    processHitStand (h ++ card)
                 else do
                     liftIO $ putStrLn "You stand"
                     return h
