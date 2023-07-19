@@ -7,7 +7,6 @@ import System.Random
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad (replicateM, forM)
-import Control.Monad.Trans.Class (lift)
 
 printTableValue :: [Card] -> IO ()
 printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
@@ -105,7 +104,7 @@ processInsurance = do
                 choice <- liftIO getLine
                 if choice == "y"
                     then do
-                        let maxBet = max (sum (bet p) * 0.5) (bankroll p)
+                        let maxBet = max (sum (bet p) `div` 2) (bankroll p)
                         liftIO $ putStrLn $ "You can bet up to " ++ show maxBet ++ ". How much would you like to bet?"
                         bet <- liftIO getLine
                         if read bet > maxBet
@@ -177,7 +176,7 @@ cleanupHands = do
     let ps = players gs
         d = dealer gs
         dh = hiddenHand d
-        discardPile = discard gs ++ hand d ++ hiddenHand d + concatMap (concat . hands) ps
+        discardPile = discard gs ++ hand d ++ hiddenHand d ++ concatMap (concat . hands) ps
     put $ gs { dealer = d { hand = [], hiddenHand = [] },
                players = map (\p -> p { hands = [[]], bet = [], insurance = 0 }) ps,
                discard = discardPile ++ discard gs }
@@ -213,13 +212,17 @@ processHand h b br canBJ = do
             choice <- liftIO getLine
             if choice == "y"
                 then do
-                    let (card1:card2) = h
+                    let (card1 : card2 : _) = h
                         smallerBr = br - b
-                    newCard <- lift dealCard
-                    (newHands, newBets, newBr) <- processHand (card1:newCard) b smallerBr False
-                    newCard2 <- lift dealCard
-                    (newHands2, newBets2, newBr2) <- processHand (card2:newCard2) b newBr False
-                    return (newHands:newHands2) (newBets:newBets2) newBr2
+                    gs <- get
+                    let (newCard, newState) = runState dealCard gs
+                    put newState
+                    (newHands, newBets, newBr) <- processHand [card1, newCard] b smallerBr False
+                    gs2 <- get
+                    let (newCard2, newState2) = runState dealCard gs2
+                    put newState2
+                    (newHands2, newBets2, newBr2) <- processHand [card2, newCard2] b newBr False
+                    return (newHands ++ newHands2, newBets ++ newBets2, newBr2)
                 else do
                     canDoubleHand h b br
         else do
@@ -240,14 +243,16 @@ canDoubleHand h b br = do
             if choice == "y"
                 then do
                     let smallerBr = br - b
-                    newCard <- lift dealCard
-                    return [h:newCard] [b] smallerBr
+                    gs <- get
+                    let (newCard, newState) = runState dealCard gs
+                    put newState
+                    return ([h ++ [newCard]], [b], smallerBr)
                 else do
                     newHand <- processHitStand h
-                    return [newHand] [b] br
+                    return ([newHand], [b], br)
         else do
             newHand <- processHitStand h
-            return [newHand] [b] br
+            return ([newHand], [b], br)
 
 canDouble :: Hand -> Money -> Money -> Bool
 canDouble h b br =
@@ -255,7 +260,7 @@ canDouble h b br =
 
 processHitStand :: Hand -> GameT IO Hand
 processHitStand h = do
-    if (handValue > 21)
+    if handValue h > 21
         then do
             liftIO $ putStrLn "You busted"
             return h
@@ -264,8 +269,10 @@ processHitStand h = do
             choice <- liftIO getLine
             if choice == "y"
                 then do
-                    card <- lift drawCard
-                    processHitStand (h ++ card)
+                    gs <- get
+                    let (newCard, newState) = runState dealCard gs
+                    put newState
+                    processHitStand (h ++ [newCard])
                 else do
                     liftIO $ putStrLn "You stand"
                     return h
@@ -274,5 +281,5 @@ allSame :: Eq a => [a] -> Bool
 allSame xs = null xs || all (== head xs) (tail xs)
 
 bjPay :: Money -> Money
-bjPay b = floor (1.5*b)
+bjPay b = 3*b `div` 2
 
