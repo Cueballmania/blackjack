@@ -12,6 +12,10 @@ data Suit = Clubs | Diamonds | Hearts | Spades
 data Card = Card Face Suit
             deriving (Show, Eq)
 
+instance Ord Card where
+    compare (Card f1 _) (Card f2 _) = compare (cardValue (Card f1 Clubs)) (cardValue (Card f2 Clubs))
+
+
 type Deck = [Card]
 
 fullDeck :: [Card]
