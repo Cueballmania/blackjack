@@ -18,31 +18,30 @@ type Money = Int
 type Hand = [Card]
 
 data Player = Player { playerName :: String
-                     , hands      :: [Hand]
-                     , bankroll   :: Money
-                     , bet        :: [Money]
-                     , insurance  :: Money }
+                     , hands      :: [(Hand, Money)]
+                     , bankroll   :: Money }
+    deriving (Eq)
 
 data Dealer = Dealer { dealerName :: String
                      , hand       :: Hand
                      , hiddenHand :: Hand }
-     deriving (Eq)
+    deriving (Eq)
 
 
 
 instance Show Player where
-    show (Player name hs br bs _) = "Player: " ++ name ++
-                                  "\nHands: " ++ show hs ++
-                                  "\nBets: " ++ show bs ++
-                                  "\nBankroll: " ++ show br
+    show (Player name hs br) = "Player: " ++ name ++
+                               "\nHands: " ++ unwords [show h ++ "\t" | (h,b) <- hs] ++
+                               "\nBets: " ++ unwords [show b ++ "\t" | (h,b) <- hs] ++
+                               "\nBankroll: " ++ show br
                                   
 instance Show Dealer where
     show (Dealer name hs hh)    = if null hh
                                     then "Dealer: " ++ name ++
                                          "\nHand: " ++ show hs
                                     else "Dealer: " ++ name ++
-                                         "\nHand: " ++ hideCard
+                                         "\nHand: " ++ openingHand
         where
-            hideCard = takeWhile (/=',') (show (hs ++ hh)) ++ ", XXX]"
+            openingHand = show hs ++ ", XXX"
 
 type GameT m = StateT Game m
