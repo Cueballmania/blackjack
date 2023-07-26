@@ -2,9 +2,8 @@ module Actions where
 
 import Types (Money, Hand, Game (..), GameT, Player (..))
 import Control.Monad.Trans.State
-import Deck (Card, shuffle)
+import Deck (Card, shuffle, cardValue)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class (lift)
 
 data Action =
     Hit
@@ -16,6 +15,7 @@ data Action =
 getValidTurnAction :: (Hand, Money) -> Money -> IO Action
 getValidTurnAction (h, b) br = do
     (prompt, actions) <- turnPrompt (h, b) br
+    putStrLn prompt
     action <- getLine
     let turnAction "H" = return Hit
         turnAction "S" = return Stand
@@ -52,17 +52,38 @@ turnPrompt (h, b) br =
 playerTurn :: Player -> GameT IO Player
 playerTurn p = do
     _ <- liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn."
-    hands <- hands p
-    br <- bankroll p
-    case hands of
+    let aHands = activeHands p
+    let pHands = playedHands p
+    let br = bankroll p
+    case aHands of
         [] -> return p
-        [h:hs] -> do 
-            _ <- liftIO $ putStrLn $ "Hand: " ++ show (fst h)
-            _ <- liftIO $ putStrLn $ "Bet: " ++ show (snd h)
-            action <- liftIO $ getValidTurnAction h br
-            newHands <- evalState (takeAction action h) <$> get
-            let newPlayer = p { hands = newHands ++ hs }
-            return newPlayer
+        ((h, b):hs) -> do 
+            _ <- liftIO $ putStrLn $ "Hand: " ++ show h
+            _ <- liftIO $ putStrLn $ "Bet: " ++ show b
+            action <- liftIO $ getValidTurnAction (h,b) br
+            case action of
+                Stand -> do
+                    playedHand <- evalState (takeAction action (h,b)) <$> get
+                    let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
+                    playerTurn newPlayer
+                Double -> do
+                    playedHand <- evalState (takeAction action (h,b)) <$> get
+                    let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
+                    playerTurn newPlayer
+                Hit -> do
+                    updatedHand <- evalState (takeAction action (h,b)) <$> get
+                    if sum (map (cardValue . head . fst) updatedHand) > 21
+                        then do
+                            _ <- liftIO $ putStrLn "Bust! Hand!"
+                            let newPlayer = p { playedHands = pHands ++ updatedHand, activeHands = hs }
+                            playerTurn newPlayer
+                        else do
+                            let newPlayer = p { playedHands = pHands, activeHands = updatedHand ++ hs }
+                            playerTurn newPlayer
+                Split -> do
+                    newHand <- evalState (takeAction action (h,b)) <$> get
+                    let newPlayer = p { activeHands = newHand ++ hs }
+                    playerTurn newPlayer
 
 
 takeAction :: Action -> (Hand, Money) -> State Game [(Hand, Money)]

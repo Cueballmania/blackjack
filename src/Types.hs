@@ -17,9 +17,10 @@ type Money = Int
 
 type Hand = [Card]
 
-data Player = Player { playerName :: String
-                     , hands      :: [(Hand, Money)]
-                     , bankroll   :: Money }
+data Player = Player { playerName  :: String
+                     , activeHands :: [(Hand, Money)]
+                     , playedHands :: [(Hand, Money)]
+                     , bankroll    :: Money }
     deriving (Eq)
 
 data Dealer = Dealer { dealerName :: String
@@ -30,10 +31,10 @@ data Dealer = Dealer { dealerName :: String
 
 
 instance Show Player where
-    show (Player name hs br) = "Player: " ++ name ++
-                               "\nHands: " ++ unwords [show h ++ "\t" | (h,b) <- hs] ++
-                               "\nBets: " ++ unwords [show b ++ "\t" | (h,b) <- hs] ++
-                               "\nBankroll: " ++ show br
+    show (Player name ah ph br) = "Player: " ++ name ++
+                                  "\nHands: " ++ unwords [show h ++ "\t" | (h,b) <- ah ++ ph] ++
+                                  "\nBets: " ++ unwords [show b ++ "\t" | (h,b) <- ah ++ ph] ++
+                                  "\nBankroll: " ++ show br
                                   
 instance Show Dealer where
     show (Dealer name hs hh)    = if null hh
