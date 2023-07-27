@@ -2,6 +2,7 @@ module Insurance where
 
 import Types (Dealer(..), Player (..))
 import Deck (cardValue)
+import Game (processInsurance)
 
 dealerBlackjack :: Dealer -> Bool
 dealerBlackjack d = length h == 2 && handValue == 21
@@ -29,3 +30,21 @@ getValidInsuranceBet maxBet = do
         _ -> do
             putStrLn "Invalid response. Try again."
             getValidInsuranceBet maxBet
+
+processInsurance :: GameT IO ()
+processInsurance = do
+    g <- get
+    let ps = players g
+    let d = dealer g
+    newPlayers <- forM ps $ \p -> do
+        let maxBet = calcMaxInsurance p
+        bet <- liftIO $ getValidInsuranceBet maxBet
+        return p { insurance = bet, bankroll = bankroll p - bet }
+    if dealerBlackack d 
+        then do
+            _ <- liftIO $ putStrLn "Dealer has blackjack. Insurance pays 2:1."
+            let newPlayers2 = map (\p -> p { bankroll = bankroll p + 2 * insurance p, insurance = 0 }) newPlayers
+        else do
+            _ <- liftIO $ putStrLn "Dealer does not have blackjack. Insurance lost."
+            let newPlayers2 = map (\p -> p { insurance = 0 }) newPlayers
+    put $ g { players = newPlayers2 }
