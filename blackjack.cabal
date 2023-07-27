@@ -25,9 +25,12 @@ source-repository head
 
 library
   exposed-modules:
+      Actions
       Bets
       Deck
       Game
+      Insurance
+      OpeningDeal
       Types
   other-modules:
       Paths_blackjack
