@@ -20,6 +20,3 @@ handValue hs = if isSoft hs
 
 isBlackjack :: Hand -> Bool
 isBlackjack h = (handValue h == 21) && (length h == 2)
-
-dealerBlackjack :: Dealer -> Bool
-dealerBlackjack d = isBlackjack $ hand d ++ hiddenHand d

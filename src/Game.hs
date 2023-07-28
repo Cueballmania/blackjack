@@ -43,11 +43,11 @@ playGame :: GameT IO ()
 playGame = do
     g <- get
     let ps = players g
-    betPlayers <- getBets ps
+    betPlayers <- liftIO $ getBets ps
     put $ g { players = betPlayers }
-    dealOpeningHands
+    _ <- evalState dealOpeningHands <$> get
     let d = dealer g
-    if cardValue . head . hiddenHand d == 1
+    if cardValue (head (hiddenHand d)) == 1
         then do
             processInsurance
             if dealerBlackjack d
@@ -115,7 +115,7 @@ dealerTurn = do
     if handValue (hand d) < 17
         then do
             liftIO $ putStrLn "Dealer hits"
-            newCard <- dealCard
+            newCard <- evalState drawCard <$> get
             let newDealer = d { hand = hand d ++ [newCard] }
             put $ gs { dealer = newDealer }
             dealerTurn

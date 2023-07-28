@@ -1,9 +1,11 @@
 module Insurance where
 
-import Types (Dealer(..), Player (..))
+import Types (Dealer(..), Player (..), Game(..), GameT)
 import Deck (cardValue)
-import Game (processInsurance)
 import BlackjackRules
+import Control.Monad.Trans.State
+import Control.Monad
+import Control.Monad.IO.Class
 
 dealerBlackjack :: Dealer -> Bool
 dealerBlackjack d = length h == 2 && handValue h == 21
@@ -40,11 +42,12 @@ processInsurance = do
         let maxBet = calcMaxInsurance p
         bet <- liftIO $ getValidInsuranceBet maxBet
         return p { insurance = bet, bankroll = bankroll p - bet }
-    if dealerBlackack d 
+    if dealerBlackjack d 
         then do
             _ <- liftIO $ putStrLn "Dealer has blackjack. Insurance pays 2:1."
             let newPlayers2 = map (\p -> p { bankroll = bankroll p + 2 * insurance p, insurance = 0 }) newPlayers
+            put $ g { players = newPlayers2 }
         else do
             _ <- liftIO $ putStrLn "Dealer does not have blackjack. Insurance lost."
             let newPlayers2 = map (\p -> p { insurance = 0 }) newPlayers
-    put $ g { players = newPlayers2 }
+            put $ g { players = newPlayers2 }
