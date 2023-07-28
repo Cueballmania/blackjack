@@ -7,9 +7,10 @@ import System.Random
 import Actions
 import BlackjackRules
 import OpeningDeal
+import Insurance
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (replicateM, forM)
+import Control.Monad (forM, forM_)
 import Control.Monad.Trans.Class (lift)
 
 printTableValue :: [Card] -> IO ()
@@ -55,11 +56,13 @@ playGame = do
                     processDealerBlackjack
                     put $ g {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
                 else do
-                    playerTurn
+                    forM_ ps $ \p -> do
+                        playerTurn p
                     put $ g { dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
                     dealerTurn
         else do
-            playerTurn
+            forM_ ps $ \p -> do
+                playerTurn p
             put $ g { dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
             dealerTurn
     makePayouts
@@ -139,10 +142,24 @@ cleanupHands = do
     gs <- get
     let ps = players gs
         d = dealer gs
-        discardPile = discard gs ++ hand d ++ concatMap (concatMap fst . playedHands) ps
-    put $ gs { dealer = d { hand = []},
+        discards = discard gs
+        discardPile = discards ++ hand d ++ concatMap (concatMap fst . playedHands) ps
+    if null (discard gs) || ratio discardPile (deck gs) > fromIntegral (penetration gs)
+        then do
+            let (newDeck, newGen) = shuffle (discards ++ deck gs) (gen gs)
+            newPen <- cutCard
+            put $ gs { dealer = d {hand = []},
                players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
-               discard = discardPile ++ discard gs }
+               deck = newDeck,
+               penetration = newPen,
+               gen = newGen,
+               discard = discardPile }
+        else put $ gs { dealer = d { hand = []},
+               players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
+               discard = discardPile }
+    where
+        ratio :: [Card] -> [Card] -> Double
+        ratio discards deck = fromIntegral (length discards) / fromIntegral (length deck)
 
 bjPay :: Money -> Money
 bjPay b = 3*b `div` 2
