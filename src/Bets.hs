@@ -4,16 +4,16 @@ import Types
 import Data.List.Split
 
 promptForBets :: Player -> IO Player
-promptForBets player = do
+promptForBets p = do
   let maxBets = 4 :: Int
-  putStrLn $ "Enter up to " ++ show maxBets ++ " bets for player " ++ playerName player ++ " separated by commas:"
+  putStrLn $ "Enter up to " ++ show maxBets ++ " bets for player " ++ playerName p ++ " separated by commas:"
   betsStr <- getLine
   let bets = parseBets betsStr
-  if isValidBets bets (bankroll player)
-    then return $ player { bet = bets, bankroll = bankroll player - sum bets }
+  if isValidBets bets (bankroll p)
+    then return $ p { activeHands = [([], b) | b <- bets], bankroll = bankroll p - sum bets }
     else do
       putStrLn "Invalid bets. Please try again."
-      promptForBets player
+      promptForBets p
 
 getBets :: [Player] -> IO [Player]
 getBets [] = return []
