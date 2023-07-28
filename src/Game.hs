@@ -5,6 +5,7 @@ import Types
 import Bets
 import System.Random
 import Actions
+import BlackjackRules
 import OpeningDeal
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
@@ -64,7 +65,46 @@ playGame = do
     cleanupHands
     playGame
 
+makePayouts :: GameT IO ()
+makePayouts = do
+    gs <- get
+    let ps = players gs
+        d = dealer gs
+    newPlayers <- forM ps $ \p ->
+        let br = bankroll p
+        payouts <- calculatePayouts d (playedHands p)
+        let winnings = sum payouts
+            resetHands = [(h, 0) | (h, _) <- playedHands p]
+        in return $ p { bankroll = br + winnings, playedHands = resetHands }
+    put $ gs { players = newPlayers }
 
+calculatePayouts :: Hand -> [(Hand, Money)] -> IO [Money]
+calculatePayouts d = mapM (calculatePayout d)
+
+calculatePayout :: Hand -> (Hand, Money) -> IO Money
+calculatePayout d (h, b)
+    | isBlackjack h = if isBlackjack d
+                        then do
+                            liftIO $ putStrLn "Push"
+                            b
+                        else do
+                            liftIO $ putStrLn "Blackjack!"
+                            bjPay b
+    | handValue h > 21 = do
+                            liftIO $ putStrLn "Bust!"
+                            0
+    | handValue d > 21 = do
+                            liftIO $ putStrLn "Win!"
+                            2 * b
+    | handValue h > handValue d = do
+                            liftIO $ putStrLn "Win!"
+                            2 * b
+    | handValue h == handValue d = do
+                            liftIO $ putStrLn "Push"
+                            b
+    | otherwise = do
+                            liftIO $ putStrLn "Loss"
+                            0
 
 dealerTurn :: GameT IO ()
 dealerTurn = do
@@ -114,10 +154,9 @@ cleanupHands = do
     gs <- get
     let ps = players gs
         d = dealer gs
-        dh = hiddenHand d
-        discardPile = discard gs ++ hand d ++ hiddenHand d ++ concatMap (concat . hands) ps
-    put $ gs { dealer = d { hand = [], hiddenHand = [] },
-               players = map (\p -> p { hands = [[]], bet = [], insurance = 0 }) ps,
+        discardPile = discard gs ++ hand d ++ concatMap (concatMap fst . playedHands) ps
+    put $ gs { dealer = d { hand = []},
+               players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
                discard = discardPile ++ discard gs }
 
 -- processPlayer :: Player -> GameT IO Player
