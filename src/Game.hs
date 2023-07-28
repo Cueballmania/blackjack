@@ -4,6 +4,7 @@ import Deck
 import Types
 import Bets
 import System.Random
+import Actions
 import OpeningDeal
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
@@ -23,27 +24,6 @@ cutCard = do
     let game' = game { penetration = pen, gen = gen' }
     put game'
     return pen
-
-handSum :: Hand -> Int
-handSum [] = 0
-handSum hs = sum $ map cardValue hs
-
-hasAce :: Hand -> Bool
-hasAce = any (\(Card f _) -> f == Ace)
-
-isSoft :: Hand -> Bool
-isSoft hs =  (handSum hs + 10 <= 21) && hasAce hs
-
-handValue :: Hand -> Int
-handValue hs = if isSoft hs
-                    then handSum hs + 10
-                    else handSum hs
-
-isBlackjack :: Hand -> Bool
-isBlackjack h = (handValue h == 21) && (length h == 2)
-
-dealerBlackjack :: Dealer -> Bool
-dealerBlackjack d = isBlackjack $ hand d ++ hiddenHand d
 
 dealCard :: State Game Card
 dealCard = do
@@ -68,33 +48,49 @@ playGame = do
     if cardValue . head . hiddenHand d == 1
         then do
             processInsurance
-            processDealerBlackjack
+            if dealerBlackjack d
+                then do
+                    processDealerBlackjack
+                    put $ g {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
+                else do
+                    playerTurn
+                    put $ g { dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+                    dealerTurn
         else do
-            return ()
+            playerTurn
+            put $ g { dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+            dealerTurn
+    makePayouts
+    cleanupHands
+    playGame
 
 
 
+dealerTurn :: GameT IO ()
+dealerTurn = do
+    gs <- get
+    let d = dealer gs
+    liftIO $ putStrLn $ "Dealer has " ++ show (hand d)
+    if handValue (hand d) < 17
+        then do
+            liftIO $ putStrLn "Dealer hits"
+            newCard <- dealCard
+            let newDealer = d { hand = hand d ++ [newCard] }
+            put $ gs { dealer = newDealer }
+            dealerTurn
+        else do
+            liftIO $ putStrLn $ "Dealer stands with " ++ show (hand d)
+
+-- If dealer has blackjack, make all player hands played
 processDealerBlackjack :: GameT IO ()
 processDealerBlackjack = do
     gs <- get
     let ps = players gs
-        d = dealer gs
-    if dealerBlackjack d
-        then do
-            liftIO $ putStrLn "Dealer has blackjack."
-            -- Dealer has blackjack so for each player, every hand is checked for blackjack
-            -- If the hand is not a blackjack, the bet is lost and the cards are taken
-            -- If the hand is blackjack then the bet is returned to the player
-            newPlayers <- forM ps $ \p -> do
-                let hs = hands p
-                    bs = bet p
-                    br = bankroll p
-                newBankroll <- checkForBlackjack hs bs br
-                return $ p { bet = replicate (length bs) 0, bankroll = newBankroll }
-            put $ gs { players = newPlayers }
-            cleanupHands
-        else do
-            return ()
+    liftIO $ putStrLn "Dealer has blackjack."
+    newPlayers <- forM ps $ \p -> do
+        let ah = activeHands p
+        return $ p { playedHands = ah, activeHands = [] }
+    put $ gs { players = newPlayers }
 
 -- Function checks each hand and bet combination
 -- If the hand is blackjack, the bet is added to the bankroll and output is "Push"
