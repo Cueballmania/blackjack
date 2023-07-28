@@ -3,12 +3,12 @@ module Insurance where
 import Types (Dealer(..), Player (..))
 import Deck (cardValue)
 import Game (processInsurance)
+import BlackjackRules
 
 dealerBlackjack :: Dealer -> Bool
-dealerBlackjack d = length h == 2 && handValue == 21
+dealerBlackjack d = length h == 2 && handValue h == 21
     where
         h = hand d ++ hiddenHand d
-        handValue = sum $ map cardValue h
 
 calcMaxInsurance :: Player -> Int
 calcMaxInsurance p = min (bankroll p) (div (sum $ map snd $ activeHands p) 2)
