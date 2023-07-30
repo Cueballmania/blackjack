@@ -47,9 +47,10 @@ playGame = do
     let ps = players g
     betPlayers <- liftIO $ getBets ps
     put $ g { players = betPlayers }
+    liftIO $ print g
     _ <- evalState dealOpeningHands <$> get
     let d = dealer g
-    if cardValue (head (hiddenHand d)) == 1
+    if cardValue (head (hand d)) == 1
         then do
             processInsurance
             if dealerBlackjack d
