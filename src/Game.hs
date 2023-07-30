@@ -10,8 +10,9 @@ import OpeningDeal
 import Insurance
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (forM, forM_)
+import Control.Monad (forM, forM_, replicateM)
 import Control.Monad.Trans.Class (lift)
+import Text.Read (readMaybe)
 
 printTableValue :: [Card] -> IO ()
 printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
@@ -164,3 +165,27 @@ cleanupHands = do
 bjPay :: Money -> Money
 bjPay b = 3*b `div` 2
 
+promptForPlayers :: IO [String]
+promptForPlayers = do
+    putStrLn "Enter the number of players:"
+    inputN <- getLine
+    case readMaybe inputN of
+        Just n | n > 0 -> do
+            promptNames n
+        _ -> do
+            putStrLn "Invalid input. Please enter a positive integer."
+            promptForPlayers
+
+promptNames :: Int -> IO [String]
+promptNames n = do
+        replicateM n $ do
+            putStrLn "Enter player name:"
+            getLine
+
+makeGame :: [String] -> IO Game
+makeGame names = do
+    let players = map (\n -> Player n [] [] 1000 0) names
+    gen <- initStdGen
+    let (newDeck, gen') = shuffle (genDecks 4) gen
+    let cut = 4 * length newDeck `div` 9
+    return $ Game newDeck [] (Dealer "Default" [] []) players cut gen'
