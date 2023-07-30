@@ -127,8 +127,11 @@ dealerTurn = do
             let newDealer = d { hand = hand d ++ [newCard] }
             put $ gs { dealer = newDealer }
             dealerTurn
-        else do
-            liftIO $ putStrLn $ "Dealer stands with " ++ show (hand d)
+        else if handValue (hand d) <= 21 
+            then do
+                liftIO $ putStrLn $ "Dealer stands with " ++ show (hand d)
+            else do
+                liftIO $ putStrLn "Dealer busts"
 
 -- If dealer has blackjack, make all player hands played
 processDealerBlackjack :: GameT IO ()

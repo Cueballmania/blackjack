@@ -21,7 +21,7 @@ getValidTurnAction (h, b) br = do
         turnAction "S" = return Stand
         turnAction "D" = return Double
         turnAction "P" = return Split
-        turnAction _ = do 
+        turnAction _ = do
             putStrLn "Invalid action. Try again."
             getValidTurnAction (h, b) br
     validAction <- turnAction action
@@ -30,18 +30,18 @@ getValidTurnAction (h, b) br = do
         else do
             putStrLn "Invalid action. Try again."
             getValidTurnAction (h, b) br
-        
+
 
 turnPrompt :: (Hand, Money) -> Money -> IO (String, [Action])
-turnPrompt (h, b) br = 
+turnPrompt (h, b) br =
     let
         prompt = if br >= b && length h == 2
-                    then if head h == head (tail h)
+                    then if cardValue (head h) == cardValue (head (tail h))
                         then "What would you like to do? (H)it, (S)tand, (D)ouble, S(P)lit"
                         else "What would you like to do? (H)it, (S)tand, (D)ouble"
                     else "What would you like to do? (H)it, (S)tand"
         actions = if br >= b && length h == 2
-                    then if head h == head (tail h)
+                    then if cardValue (head h) == cardValue (head (tail h))
                         then [Hit, Stand, Double, Split]
                         else [Hit, Stand, Double]
                     else [Hit, Stand]
@@ -57,31 +57,35 @@ playerTurn p = do
     let br = bankroll p
     case aHands of
         [] -> return p
-        ((h, b):hs) -> do 
+        ((h, b):hs) -> do
             _ <- liftIO $ putStrLn $ "Hand: " ++ show h
             _ <- liftIO $ putStrLn $ "Bet: " ++ show b
             action <- liftIO $ getValidTurnAction (h,b) br
             case action of
                 Stand -> do
-                    playedHand <- evalState (takeAction action (h,b)) <$> get
+                    (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
+                    put newState
                     let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
                     playerTurn newPlayer
                 Double -> do
-                    playedHand <- evalState (takeAction action (h,b)) <$> get
+                    (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
+                    put newState
                     let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
                     playerTurn newPlayer
                 Hit -> do
-                    updatedHand <- evalState (takeAction action (h,b)) <$> get
-                    if sum (map (cardValue . head . fst) updatedHand) > 21
+                    (updatedHand, newState) <- runState (takeAction action (h,b)) <$> get
+                    put newState
+                    if sum (map cardValue (fst $ head updatedHand)) > 21
                         then do
-                            _ <- liftIO $ putStrLn "Bust! Hand!"
+                            _ <- liftIO $ putStrLn "Bust Hand!"
                             let newPlayer = p { playedHands = pHands ++ updatedHand, activeHands = hs }
                             playerTurn newPlayer
                         else do
                             let newPlayer = p { playedHands = pHands, activeHands = updatedHand ++ hs }
                             playerTurn newPlayer
                 Split -> do
-                    newHand <- evalState (takeAction action (h,b)) <$> get
+                    (newHand, newState) <- runState (takeAction action (h,b)) <$> get
+                    put newState
                     let newPlayer = p { activeHands = newHand ++ hs }
                     playerTurn newPlayer
 
@@ -97,7 +101,7 @@ takeAction Double (h, b) = if length h == 2
                                     return [(newCard : h, b * 2)]
                                 else do
                                     return [(h,b)]
-takeAction Split (h, b) = if length h == 2 && head h == head (tail h)
+takeAction Split (h, b) = if length h == 2 && cardValue (head h) == cardValue (head (tail h))
                                 then do
                                     newCard1 <- drawCard
                                     newCard2 <- drawCard
