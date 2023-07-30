@@ -11,7 +11,6 @@ dealOpeningHands = do
     g <- get
     let ps = players g
     let d = dealer g
-
     newPlayers <- dealCardToAllPlayers ps
     newCard <- drawCard
     newPlayers2 <- dealCardToAllPlayers newPlayers
