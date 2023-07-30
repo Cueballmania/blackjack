@@ -10,7 +10,8 @@ promptForBets p = do
   betsStr <- getLine
   let bets = parseBets betsStr
   if isValidBets bets (bankroll p)
-    then return $ p { activeHands = [([], b) | b <- bets], bankroll = bankroll p - sum bets }
+    then
+      return $ p { activeHands = [([], b) | b <- bets], bankroll = bankroll p - sum bets }
     else do
       putStrLn "Invalid bets. Please try again."
       promptForBets p
