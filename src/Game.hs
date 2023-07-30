@@ -52,6 +52,7 @@ playGame = do
     g2 <- get
     let ps2 = players g2
     let d = dealer g2
+    liftIO $ print d
     if cardValue (head (hand d)) == 1
         then do
             processInsurance
