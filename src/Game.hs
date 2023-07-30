@@ -123,11 +123,12 @@ dealerTurn = do
     if handValue (hand d) < 17
         then do
             liftIO $ putStrLn "Dealer hits"
-            newCard <- evalState drawCard <$> get
+            (newCard, newState) <- runState drawCard <$> get
+            put newState
             let newDealer = d { hand = hand d ++ [newCard] }
             put $ gs { dealer = newDealer }
             dealerTurn
-        else if handValue (hand d) <= 21 
+        else if handValue (hand d) <= 21
             then do
                 liftIO $ putStrLn $ "Dealer stands with " ++ show (hand d)
             else do
