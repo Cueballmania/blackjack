@@ -110,7 +110,7 @@ calculatePayout :: Hand -> (Hand, Money) -> IO Money
 calculatePayout d (h, b)
     | isBlackjack h = if isBlackjack d
                         then do
-                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++ ") Pushes"
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++ ") is a Blackjack but Pushes"
                             return b
                         else do
                             putStrLn $ "Hand: " ++ show h ++ "is a Blackjack! Payout: " ++  show (bjPay b)
@@ -218,8 +218,8 @@ promptNames n = do
 makeGame :: [String] -> IO Game
 makeGame names = do
     let initPlayers = map (\n -> Player n [] [] 1000 0) names
-    gen <- initStdGen
-    let (newDeck, gen') = shuffle (genDecks 6) gen
+    initGen <- initStdGen
+    let (newDeck, gen') = shuffle (genDecks 6) initGen
     let cut = 4 * length newDeck `div` 9
     return $ Game {deck = newDeck,
                    discard = [],
