@@ -47,9 +47,8 @@ playGame = do
     let ps = players g
     betPlayers <- liftIO $ getBets ps
     put $ g { players = betPlayers }
-    (_, newState) <- runState dealOpeningHands <$> get
-    put newState
-    g2 <- get
+    (_, g2) <- runState dealOpeningHands <$> get
+    put g2
     let ps2 = players g2
     let d = dealer g2
     liftIO $ print d
@@ -61,14 +60,14 @@ playGame = do
                     processDealerBlackjack
                     put $ g2 {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
                 else do
-                    forM_ ps2 $ \p -> do
+                    newPlayers <- forM ps2 $ \p -> do
                         playerTurn p
-                    put $ g2 { dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+                    put $ g2 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
                     dealerTurn
         else do
-            forM_ ps2 $ \p -> do
+            newPlayers <- forM ps2 $ \p -> do
                 playerTurn p
-            put $ g2 { dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+            put $ g2 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
             dealerTurn
     makePayouts
     cleanupHands
