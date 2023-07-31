@@ -50,6 +50,7 @@ playGame = do
     put g2
     let ps2 = players g2
     let d = dealer g2
+    _ <- liftIO $ putStrLn ""
     liftIO $ print d
     if cardValue (head (hand d)) == 1
         then do
@@ -61,15 +62,19 @@ playGame = do
                     put $ g3 {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
                 else do
                     newPlayers <- forM ps2 $ \p -> do
+                        _ <- liftIO $ putStrLn ""
                         playerTurn p
                     g3 <- get
                     put $ g3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+                    _ <- liftIO $ putStrLn ""
                     dealerTurn
         else do
             newPlayers <- forM ps2 $ \p -> do
+                _ <- liftIO $ putStrLn ""
                 playerTurn p
             g3 <- get
             put $ g3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+            _ <- liftIO $ putStrLn ""
             dealerTurn
     makePayouts
     cleanupHands
@@ -214,7 +219,7 @@ makeGame :: [String] -> IO Game
 makeGame names = do
     let initPlayers = map (\n -> Player n [] [] 1000 0) names
     gen <- initStdGen
-    let (newDeck, gen') = shuffle (genDecks 1) gen
+    let (newDeck, gen') = shuffle (genDecks 6) gen
     let cut = 4 * length newDeck `div` 9
     return $ Game {deck = newDeck,
                    discard = [],

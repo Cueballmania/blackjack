@@ -1,6 +1,7 @@
 module Actions where
 
 import Types (Money, Hand, Game (..), GameT, Player (..))
+import BlackjackRules (handValue)
 import Control.Monad.Trans.State
 import Deck (Card, shuffle, cardValue)
 import Control.Monad.IO.Class (liftIO)
@@ -58,12 +59,12 @@ playerTurn p = do
         [] -> return p
         ((h, b):hs) -> do
             _ <- liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn."
-            _ <- liftIO $ putStrLn $ "Hand: " ++ show h ++  " Value: " ++ show (sum (map cardValue h))
+            _ <- liftIO $ putStrLn $ "Hand: " ++ show h ++  " Value: " ++ show (handValue h)
             _ <- liftIO $ putStrLn $ "Bet: " ++ show b
             action <- liftIO $ getValidTurnAction (h,b) br
             case action of
                 Stand -> do
-                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " stands with hand: " ++ show h ++  " Value: " ++ show (sum (map cardValue h))
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " stands with hand: " ++ show h ++  " Value: " ++ show (handValue h)
                     (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
                     let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
@@ -71,25 +72,24 @@ playerTurn p = do
                 Double -> do
                     (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
-                    let handValue = sum (map cardValue (fst $ head playedHand))
-                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " doubles to hand: " ++ show (fst $ head playedHand) ++  " Value: " ++ show handValue
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " doubles to hand: " ++ show (fst $ head playedHand) ++  " Value: " ++ show (handValue (fst $ head playedHand))
                     let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs, bankroll = br - b }
                     playerTurn newPlayer
                 Hit -> do
                     _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " hits!"
                     (updatedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
-                    let handValue = sum (map cardValue (fst $ head updatedHand))
-                    if handValue > 21
+                    let currentHand = fst $ head updatedHand
+                    if handValue currentHand > 21
                         then do
-                            _ <- liftIO $ putStrLn $ "Bust Hand! " ++ show (fst $ head updatedHand) ++ " Value: " ++ show handValue
+                            _ <- liftIO $ putStrLn $ "Bust Hand! " ++ show currentHand ++ " Value: " ++ show (handValue currentHand)
                             let newPlayer = p { playedHands = pHands ++ updatedHand, activeHands = hs }
                             playerTurn newPlayer
                         else do
                             let newPlayer = p { playedHands = pHands, activeHands = updatedHand ++ hs }
                             playerTurn newPlayer
                 Split -> do
-                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " splits " ++ show (cardValue $ head h)
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " splits " ++ show (handValue [head h])
                     (newHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
                     let newPlayer = p { activeHands = newHand ++ hs, bankroll = br - b }
