@@ -16,7 +16,8 @@ dealOpeningHands = do
     newPlayers2 <- dealCardToAllPlayers newPlayers
     newCard2 <- drawCard
     let newDealer2 = d { hand = [newCard], hiddenHand = [newCard2] }
-    put $ g { players = newPlayers2, dealer = newDealer2 }
+    g2 <- get
+    put $ g2 { players = newPlayers2, dealer = newDealer2 }
 
 dealCardToAllPlayers :: [Player] -> State Game [Player]
 dealCardToAllPlayers ps = do
