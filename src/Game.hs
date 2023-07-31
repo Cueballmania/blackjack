@@ -11,8 +11,7 @@ import OpeningDeal
 import Insurance
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (forM, forM_, replicateM)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad (forM, replicateM)
 import Text.Read (readMaybe)
 
 printTableValue :: [Card] -> IO ()
@@ -36,7 +35,7 @@ dealCard = do
     case deck gs of
         [] -> do
             let (newDeck, newGen) = shuffle (discard gs) (gen gs)
-            put $ gs { deck = newDeck, discard = [], gen = newGen }
+            put $ gs { deck = newDeck, discard = [], gen = newGen , penetration = 2 * length newDeck }
             dealCard
         (c:cs) -> do
             put $ gs { deck = cs }
@@ -74,8 +73,6 @@ playGame = do
             dealerTurn
     makePayouts
     cleanupHands
-    g4 <-get
-    liftIO $ print g4
     playGame
 
 makePayouts :: GameT IO ()
@@ -156,22 +153,18 @@ cleanupHands = do
         d = dealer gs
         discards = discard gs
         discardPile = discards ++ hand d ++ concatMap (concatMap fst . playedHands) ps
-    if null (discard gs) || ratio discardPile (deck gs) > fromIntegral (penetration gs)
+    if length (deck gs) < penetration gs
         then do
-            let (newDeck, newGen) = shuffle (discards ++ deck gs) (gen gs)
-            newPen <- cutCard
-            put $ gs { dealer = d {hand = []},
+            let (newDeck, newGen) = shuffle (discardPile ++ deck gs) (gen gs)
+            put gs { dealer = d {hand = []},
                players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
-               deck = newDeck,
-               penetration = newPen,
-               gen = newGen,
-               discard = [] }
+               deck = newDeck, gen = newGen, discard = [] }
+            newPen <- cutCard
+            g2 <- get
+            put $ g2 { penetration = newPen }
         else put $ gs { dealer = d { hand = []},
                players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
                discard = discardPile }
-    where
-        ratio :: [Card] -> [Card] -> Double
-        ratio discards deck = fromIntegral (length discards) / fromIntegral (length deck + length discards)
 
 bjPay :: Money -> Money
 bjPay b = 3*b `div` 2
@@ -197,7 +190,6 @@ makeGame :: [String] -> IO Game
 makeGame names = do
     let players = map (\n -> Player n [] [] 1000 0) names
     gen <- initStdGen
---    let (newDeck, gen') = shuffle (genDecks 1) gen
-    let (newDeck, gen') = (genDecks 1, gen)
+    let (newDeck, gen') = shuffle (genDecks 1) gen
     let cut = 4 * length newDeck `div` 9
     return $ Game newDeck [] (Dealer "Default" [] []) players cut gen'
