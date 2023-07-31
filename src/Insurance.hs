@@ -1,7 +1,6 @@
 module Insurance where
 
 import Types (Dealer(..), Player (..), Game(..), GameT)
-import Deck (cardValue)
 import BlackjackRules
 import Control.Monad.Trans.State
 import Control.Monad

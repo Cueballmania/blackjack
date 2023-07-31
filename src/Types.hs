@@ -33,8 +33,8 @@ data Dealer = Dealer { dealerName :: String
 
 instance Show Player where
     show (Player name ah ph br _) = "Player: " ++ name ++
-                                  "\nHands: " ++ unwords [show h ++ "\t" | (h,b) <- ah ++ ph] ++
-                                  "\nBets: " ++ unwords [show b ++ "\t" | (h,b) <- ah ++ ph] ++
+                                  "\nHands: " ++ unwords [show h ++ "\t" | (h,_) <- ah ++ ph] ++
+                                  "\nBets: " ++ unwords [show b ++ "\t" | (_,b) <- ah ++ ph] ++
                                   "\nBankroll: " ++ show br
                                   
 instance Show Dealer where
