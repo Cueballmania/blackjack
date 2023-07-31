@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Game where
 
 import Deck
@@ -62,15 +63,19 @@ playGame = do
                 else do
                     newPlayers <- forM ps2 $ \p -> do
                         playerTurn p
-                    put $ g2 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+                    g3 <- get
+                    put $ g3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
                     dealerTurn
         else do
             newPlayers <- forM ps2 $ \p -> do
                 playerTurn p
-            put $ g2 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+            g3 <- get
+            put $ g3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
             dealerTurn
     makePayouts
     cleanupHands
+    g4 <-get
+    liftIO $ print g4
     playGame
 
 makePayouts :: GameT IO ()
@@ -123,9 +128,8 @@ dealerTurn = do
         then do
             liftIO $ putStrLn "Dealer hits"
             (newCard, newState) <- runState drawCard <$> get
-            put newState
             let newDealer = d { hand = hand d ++ [newCard] }
-            put $ gs { dealer = newDealer }
+            put $ newState { dealer = newDealer }
             dealerTurn
         else if handValue (hand d) <= 21
             then do
@@ -161,13 +165,13 @@ cleanupHands = do
                deck = newDeck,
                penetration = newPen,
                gen = newGen,
-               discard = discardPile }
+               discard = [] }
         else put $ gs { dealer = d { hand = []},
                players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
                discard = discardPile }
     where
         ratio :: [Card] -> [Card] -> Double
-        ratio discards deck = fromIntegral (length discards) / fromIntegral (length deck)
+        ratio discards deck = fromIntegral (length discards) / fromIntegral (length deck + length discards)
 
 bjPay :: Money -> Money
 bjPay b = 3*b `div` 2
@@ -193,6 +197,7 @@ makeGame :: [String] -> IO Game
 makeGame names = do
     let players = map (\n -> Player n [] [] 1000 0) names
     gen <- initStdGen
-    let (newDeck, gen') = shuffle (genDecks 4) gen
+--    let (newDeck, gen') = shuffle (genDecks 1) gen
+    let (newDeck, gen') = (genDecks 1, gen)
     let cut = 4 * length newDeck `div` 9
     return $ Game newDeck [] (Dealer "Default" [] []) players cut gen'
