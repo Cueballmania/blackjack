@@ -51,18 +51,19 @@ turnPrompt (h, b) br =
 
 playerTurn :: Player -> GameT IO Player
 playerTurn p = do
-    _ <- liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn."
     let aHands = activeHands p
     let pHands = playedHands p
     let br = bankroll p
     case aHands of
         [] -> return p
         ((h, b):hs) -> do
+            _ <- liftIO $ putStrLn $ "It's " ++ playerName p ++ "'s turn."
             _ <- liftIO $ putStrLn $ "Hand: " ++ show h ++  " Value: " ++ show (sum (map cardValue h))
             _ <- liftIO $ putStrLn $ "Bet: " ++ show b
             action <- liftIO $ getValidTurnAction (h,b) br
             case action of
                 Stand -> do
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " stands with hand: " ++ show h ++  " Value: " ++ show (sum (map cardValue h))
                     (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
                     let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
@@ -70,20 +71,26 @@ playerTurn p = do
                 Double -> do
                     (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
+                    let handValue = sum (map cardValue (fst $ head playedHand))
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " doubles to hand: " ++ show (fst $ head playedHand) ++  " Value: " ++ show handValue
                     let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs, bankroll = br - b }
                     playerTurn newPlayer
                 Hit -> do
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " hits!"
                     (updatedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
-                    if sum (map cardValue (fst $ head updatedHand)) > 21
+                    let handValue = sum (map cardValue (fst $ head updatedHand))
+                    if handValue > 21
                         then do
-                            _ <- liftIO $ putStrLn "Bust Hand!"
+                            _ <- liftIO $ putStrLn $ "Bust Hand! with " ++ show (fst $ head updatedHand) ++ " Value: " ++ show handValue
                             let newPlayer = p { playedHands = pHands ++ updatedHand, activeHands = hs }
                             playerTurn newPlayer
                         else do
+                            _ <- liftIO $ putStrLn $ "Now has: " ++ show h ++  " Value: " ++ show handValue
                             let newPlayer = p { playedHands = pHands, activeHands = updatedHand ++ hs }
                             playerTurn newPlayer
                 Split -> do
+                    _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " splits " ++ show (cardValue $ head h)
                     (newHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
                     let newPlayer = p { activeHands = newHand ++ hs, bankroll = br - b }
@@ -91,10 +98,10 @@ playerTurn p = do
 
 
 takeAction :: Action -> (Hand, Money) -> State Game [(Hand, Money)]
+takeAction Stand (h, b) = return [(h, b)]
 takeAction Hit (h, b) = do
     newCard <- drawCard
     return [(h ++ [newCard], b)]
-takeAction Stand (h, b) = return [(h, b)]
 takeAction Double (h, b) = if length h == 2
                                 then do
                                     newCard <- drawCard

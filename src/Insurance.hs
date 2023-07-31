@@ -40,8 +40,11 @@ processInsurance = do
     let d = dealer g
     newPlayers <- forM ps $ \p -> do
         let maxBet = calcMaxInsurance p
-        bet <- liftIO $ getValidInsuranceBet maxBet
-        return p { insurance = bet, bankroll = bankroll p - bet }
+        if maxBet > 0
+            then do
+                bet <- liftIO $ getValidInsuranceBet maxBet
+                return p { insurance = bet, bankroll = bankroll p - bet }
+            else return p
     if dealerBlackjack d 
         then do
             _ <- liftIO $ putStrLn "Dealer has blackjack. Insurance pays 2:1."

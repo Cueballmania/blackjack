@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Game where
 
 import Deck
@@ -11,7 +10,7 @@ import OpeningDeal
 import Insurance
 import Control.Monad.Trans.State
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (forM, replicateM)
+import Control.Monad (forM, filterM, replicateM)
 import Text.Read (readMaybe)
 
 printTableValue :: [Card] -> IO ()
@@ -73,7 +72,15 @@ playGame = do
             dealerTurn
     makePayouts
     cleanupHands
-    playGame
+    cleanupPlayers
+    g4 <- get
+    if not (null (players g4))
+        then do
+            _ <- liftIO $ putStrLn "Next hand! \n\n"
+            playGame
+        else do
+            _ <- liftIO $ putStrLn "Game Over"
+            return ()
 
 makePayouts :: GameT IO ()
 makePayouts = do
@@ -96,25 +103,25 @@ calculatePayout :: Hand -> (Hand, Money) -> IO Money
 calculatePayout d (h, b)
     | isBlackjack h = if isBlackjack d
                         then do
-                            putStrLn "Push"
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++ ") Pushes"
                             return b
                         else do
-                            putStrLn $ "Blackjack! " ++  show (bjPay b)
+                            putStrLn $ "Hand: " ++ show h ++ "is a Blackjack! Payout:" ++  show (bjPay b)
                             return $ bjPay b
     | handValue h > 21 = do
-                            putStrLn "Bust!"
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Busts!"
                             return 0
     | handValue d > 21 = do
-                            putStrLn $ "Win! " ++ show b
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Wins! Payout:" ++ show b
                             return $ 2 * b
     | handValue h > handValue d = do
-                            putStrLn $ "Win! " ++ show b
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Wins! Payout:" ++ show b
                             return $ 2 * b
     | handValue h == handValue d = do
-                            putStrLn "Push"
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++ ") Pushes"
                             return b
     | otherwise = do
-                            putStrLn "Loss"
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Loses"
                             return 0
 
 dealerTurn :: GameT IO ()
@@ -166,6 +173,20 @@ cleanupHands = do
         else put $ gs { dealer = d { hand = []},
                players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
                discard = discardPile }
+
+cleanupPlayers :: GameT IO ()
+cleanupPlayers  = do
+    gs <- get
+    let ps = players gs
+    newPlayers <- filterM (\p -> do
+        let br = bankroll p
+        if br <= 0
+            then do
+                liftIO $ putStrLn $ "Player " ++ playerName p ++ " is out of money."
+                return False
+            else do
+                return True) ps
+    put $ gs { players = newPlayers }
 
 bjPay :: Money -> Money
 bjPay b = 3*b `div` 2
