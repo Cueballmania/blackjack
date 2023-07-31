@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -25,7 +25,14 @@ source-repository head
 
 library
   exposed-modules:
+      Actions
+      Bets
+      BlackjackRules
       Deck
+      Game
+      Insurance
+      OpeningDeal
+      Types
   other-modules:
       Paths_blackjack
   hs-source-dirs:
@@ -33,21 +40,23 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , lens
     , random
+    , split
     , transformers
   default-language: Haskell2010
 
 executable blackjack-exe
   main-is: Main.hs
-  other-modules:
-      Paths_blackjack
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , blackjack
+    , lens
     , random
+    , split
     , transformers
   default-language: Haskell2010
 
@@ -62,6 +71,8 @@ test-suite blackjack-test
   build-depends:
       base >=4.7 && <5
     , blackjack
+    , lens
     , random
+    , split
     , transformers
   default-language: Haskell2010

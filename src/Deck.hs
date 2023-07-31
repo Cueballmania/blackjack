@@ -1,6 +1,6 @@
 module Deck where
 
-import System.Random
+import System.Random (StdGen, randomR)
 
 data Face = Ace | Two | Three | Four | Five | Six |
             Seven | Eight | Nine | Ten | Jack | Queen | King
@@ -11,6 +11,10 @@ data Suit = Clubs | Diamonds | Hearts | Spades
 
 data Card = Card Face Suit
             deriving (Show, Eq)
+
+instance Ord Card where
+    compare (Card f1 _) (Card f2 _) = compare (cardValue (Card f1 Clubs)) (cardValue (Card f2 Clubs))
+
 
 type Deck = [Card]
 
@@ -44,5 +48,3 @@ cardValue (Card face _) =
         Eight -> 8
         Nine  -> 9
         _     -> 10
-
-
