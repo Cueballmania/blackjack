@@ -82,11 +82,10 @@ playerTurn p = do
                     let handValue = sum (map cardValue (fst $ head updatedHand))
                     if handValue > 21
                         then do
-                            _ <- liftIO $ putStrLn $ "Bust Hand! with " ++ show (fst $ head updatedHand) ++ " Value: " ++ show handValue
+                            _ <- liftIO $ putStrLn $ "Bust Hand! " ++ show (fst $ head updatedHand) ++ " Value: " ++ show handValue
                             let newPlayer = p { playedHands = pHands ++ updatedHand, activeHands = hs }
                             playerTurn newPlayer
                         else do
-                            _ <- liftIO $ putStrLn $ "Now has: " ++ show h ++  " Value: " ++ show handValue
                             let newPlayer = p { playedHands = pHands, activeHands = updatedHand ++ hs }
                             playerTurn newPlayer
                 Split -> do

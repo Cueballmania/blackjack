@@ -48,7 +48,7 @@ processInsurance = do
     if dealerBlackjack d 
         then do
             _ <- liftIO $ putStrLn "Dealer has blackjack. Insurance pays 2:1."
-            let newPlayers2 = map (\p -> p { bankroll = bankroll p + 2 * insurance p, insurance = 0 }) newPlayers
+            let newPlayers2 = map (\p -> p { bankroll = bankroll p + 3 * insurance p, insurance = 0 }) newPlayers
             put $ g { players = newPlayers2 }
         else do
             _ <- liftIO $ putStrLn "Dealer does not have blackjack. Insurance lost."

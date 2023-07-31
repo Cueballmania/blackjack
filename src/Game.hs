@@ -57,7 +57,8 @@ playGame = do
             if dealerBlackjack d
                 then do
                     processDealerBlackjack
-                    put $ g2 {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
+                    g3 <- get
+                    put $ g3 {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
                 else do
                     newPlayers <- forM ps2 $ \p -> do
                         playerTurn p
@@ -89,6 +90,7 @@ makePayouts = do
         d = dealer gs
     newPlayers <- forM ps $ \p -> do
         let br = bankroll p
+        _ <- liftIO $ putStrLn $ "\nPlayer " ++ playerName p ++ "'s hands:"
         payouts <- liftIO $ calculatePayouts (hand d) (playedHands p)
         let winnings = sum payouts
             resetHands = [(h, 0) | (h, _) <- playedHands p]
@@ -106,16 +108,16 @@ calculatePayout d (h, b)
                             putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++ ") Pushes"
                             return b
                         else do
-                            putStrLn $ "Hand: " ++ show h ++ "is a Blackjack! Payout:" ++  show (bjPay b)
+                            putStrLn $ "Hand: " ++ show h ++ "is a Blackjack! Payout: " ++  show (bjPay b)
                             return $ bjPay b
     | handValue h > 21 = do
                             putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Busts!"
                             return 0
     | handValue d > 21 = do
-                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Wins! Payout:" ++ show b
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Wins! Payout: " ++ show b
                             return $ 2 * b
     | handValue h > handValue d = do
-                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Wins! Payout:" ++ show b
+                            putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Wins! Payout: " ++ show b
                             return $ 2 * b
     | handValue h == handValue d = do
                             putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++ ") Pushes"
@@ -210,8 +212,15 @@ promptNames n = do
 
 makeGame :: [String] -> IO Game
 makeGame names = do
-    let players = map (\n -> Player n [] [] 1000 0) names
+    let initPlayers = map (\n -> Player n [] [] 1000 0) names
     gen <- initStdGen
     let (newDeck, gen') = shuffle (genDecks 1) gen
     let cut = 4 * length newDeck `div` 9
-    return $ Game newDeck [] (Dealer "Default" [] []) players cut gen'
+    return $ Game {deck = newDeck,
+                   discard = [],
+                   dealer = Dealer { dealerName = "Default",
+                                     hand = [],
+                                     hiddenHand = [] }, 
+                   players = initPlayers,
+                   penetration = cut,
+                   gen = gen' }
