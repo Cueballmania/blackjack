@@ -81,7 +81,7 @@ makePayouts = do
         d = dealer gs
     newPlayers <- forM ps $ \p -> do
         let br = bankroll p
-        payouts <- lift $ calculatePayouts (hand d) (playedHands p)
+        payouts <- liftIO $ calculatePayouts (hand d) (playedHands p)
         let winnings = sum payouts
             resetHands = [(h, 0) | (h, _) <- playedHands p]
         return $ p { bankroll = br + winnings, playedHands = resetHands }
@@ -94,25 +94,25 @@ calculatePayout :: Hand -> (Hand, Money) -> IO Money
 calculatePayout d (h, b)
     | isBlackjack h = if isBlackjack d
                         then do
-                            liftIO $ putStrLn "Push"
+                            putStrLn "Push"
                             return b
                         else do
-                            liftIO $ putStrLn "Blackjack!"
+                            putStrLn "Blackjack!"
                             return $ bjPay b
     | handValue h > 21 = do
-                            liftIO $ putStrLn "Bust!"
+                            putStrLn "Bust!"
                             return 0
     | handValue d > 21 = do
-                            liftIO $ putStrLn "Win!"
+                            putStrLn "Win!"
                             return $ 2 * b
     | handValue h > handValue d = do
-                            liftIO $ putStrLn "Win!"
+                            putStrLn "Win!"
                             return $ 2 * b
     | handValue h == handValue d = do
-                            liftIO $ putStrLn "Push"
+                            putStrLn "Push"
                             return b
     | otherwise = do
-                            liftIO $ putStrLn "Loss"
+                            putStrLn "Loss"
                             return 0
 
 dealerTurn :: GameT IO ()

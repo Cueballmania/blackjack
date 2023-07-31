@@ -70,7 +70,7 @@ playerTurn p = do
                 Double -> do
                     (playedHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
-                    let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs }
+                    let newPlayer = p { playedHands = pHands ++ playedHand, activeHands = hs, bankroll = br - b }
                     playerTurn newPlayer
                 Hit -> do
                     (updatedHand, newState) <- runState (takeAction action (h,b)) <$> get
@@ -86,7 +86,7 @@ playerTurn p = do
                 Split -> do
                     (newHand, newState) <- runState (takeAction action (h,b)) <$> get
                     put newState
-                    let newPlayer = p { activeHands = newHand ++ hs }
+                    let newPlayer = p { activeHands = newHand ++ hs, bankroll = br - b }
                     playerTurn newPlayer
 
 
