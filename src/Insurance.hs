@@ -21,7 +21,7 @@ getValidInsuranceBet maxBet = do
     response <- getLine
     case response of
         "Y" -> do
-            putStrLn $ "You can bet up to" ++ show maxBet ++ "How much would you like to bet?"
+            putStrLn $ "You can bet up to " ++ show maxBet ++ "\nHow much would you like to bet?"
             bet <- read <$> getLine
             if bet > maxBet
                 then do
@@ -52,5 +52,5 @@ processInsurance = do
             put $ g { players = newPlayers2 }
         else do
             _ <- liftIO $ putStrLn "Dealer does not have blackjack. Insurance lost."
-            let newPlayers2 = map (\p -> p { insurance = 0 }) newPlayers
+            let newPlayers2 = map (\p -> p { bankroll = bankroll p, insurance = 0 }) newPlayers
             put $ g { players = newPlayers2 }
