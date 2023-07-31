@@ -85,6 +85,7 @@ makePayouts = do
         payouts <- liftIO $ calculatePayouts (hand d) (playedHands p)
         let winnings = sum payouts
             resetHands = [(h, 0) | (h, _) <- playedHands p]
+        _ <- liftIO $ putStrLn $ "Player " ++ playerName p ++ " now has " ++ show (br + winnings)
         return $ p { bankroll = br + winnings, playedHands = resetHands }
     put $ gs { players = newPlayers }
 
@@ -98,16 +99,16 @@ calculatePayout d (h, b)
                             putStrLn "Push"
                             return b
                         else do
-                            putStrLn "Blackjack!"
+                            putStrLn $ "Blackjack! " ++  show (bjPay b)
                             return $ bjPay b
     | handValue h > 21 = do
                             putStrLn "Bust!"
                             return 0
     | handValue d > 21 = do
-                            putStrLn "Win!"
+                            putStrLn $ "Win! " ++ show b
                             return $ 2 * b
     | handValue h > handValue d = do
-                            putStrLn "Win!"
+                            putStrLn $ "Win! " ++ show b
                             return $ 2 * b
     | handValue h == handValue d = do
                             putStrLn "Push"
@@ -120,7 +121,7 @@ dealerTurn :: GameT IO ()
 dealerTurn = do
     gs <- get
     let d = dealer gs
-    liftIO $ putStrLn $ "Dealer has " ++ show (hand d)
+    liftIO $ putStrLn $ "Dealer has " ++ show (hand d) ++ " for a value of " ++ show (handValue (hand d))
     if handValue (hand d) < 17
         then do
             liftIO $ putStrLn "Dealer hits"
@@ -130,7 +131,7 @@ dealerTurn = do
             dealerTurn
         else if handValue (hand d) <= 21
             then do
-                liftIO $ putStrLn $ "Dealer stands with " ++ show (hand d)
+                liftIO $ putStrLn $ "Dealer stands with " ++ show (hand d) ++ " for a value of " ++ show (handValue (hand d))
             else do
                 liftIO $ putStrLn "Dealer busts"
 

@@ -58,7 +58,7 @@ playerTurn p = do
     case aHands of
         [] -> return p
         ((h, b):hs) -> do
-            _ <- liftIO $ putStrLn $ "Hand: " ++ show h
+            _ <- liftIO $ putStrLn $ "Hand: " ++ show h ++  " Value: " ++ show (sum (map cardValue h))
             _ <- liftIO $ putStrLn $ "Bet: " ++ show b
             action <- liftIO $ getValidTurnAction (h,b) br
             case action of
