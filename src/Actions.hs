@@ -93,7 +93,7 @@ playerTurn p = do
 takeAction :: Action -> (Hand, Money) -> State Game [(Hand, Money)]
 takeAction Hit (h, b) = do
     newCard <- drawCard
-    return [(newCard : h, b)]
+    return [(h ++ [newCard], b)]
 takeAction Stand (h, b) = return [(h, b)]
 takeAction Double (h, b) = if length h == 2
                                 then do
