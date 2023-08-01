@@ -8,9 +8,11 @@ import Control.Monad.Trans.State ( get, put )
 import Control.Monad ( forM )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 
+-- Maximum insurance bet is half the sum of all active bets
 calcMaxInsurance :: Player -> Int
 calcMaxInsurance p = min (bankroll p) (div (sum $ map snd $ activeHands p) 2)
 
+-- Prompt for a valid insurance bet, if no bet or invalid bet is entered, return 0
 getValidInsuranceBet :: Int -> IO Int
 getValidInsuranceBet maxBet = do
     putStrLn "Would you like to buy insurance? (Y/N)"
@@ -29,11 +31,13 @@ getValidInsuranceBet maxBet = do
             putStrLn "Invalid response. Try again."
             getValidInsuranceBet maxBet
 
+-- Logic to ask each player for an insurance bet then process the dealer's hand
+-- if the dealer has a blackjack, insurance pays 2:1 or else all insurance bets are lost
 processInsurance :: GameT IO ()
 processInsurance = do
-    g <- get
-    let ps = players g
-    let d = dealer g
+    gs<- get
+    let ps = players gs
+    let d = dealer gs
     newPlayers <- forM ps $ \p -> do
         let maxBet = calcMaxInsurance p
         if maxBet > 0
@@ -45,8 +49,8 @@ processInsurance = do
         then do
             _ <- liftIO $ putStrLn "Dealer has blackjack. Insurance pays 2:1."
             let newPlayers2 = map (\p -> p { bankroll = bankroll p + 3 * insurance p, insurance = 0 }) newPlayers
-            put $ g { players = newPlayers2 }
+            put $ gs { players = newPlayers2 }
         else do
             _ <- liftIO $ putStrLn "Dealer does not have blackjack. Insurance lost."
             let newPlayers2 = map (\p -> p { bankroll = bankroll p, insurance = 0 }) newPlayers
-            put $ g { players = newPlayers2 }
+            put $ gs { players = newPlayers2 }

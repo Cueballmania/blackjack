@@ -1,3 +1,4 @@
+-- Helper functions to resolve hands
 module BlackjackRules (
     hasAce,
     handValue,
