@@ -1,4 +1,8 @@
-module Actions where
+module Actions (
+    playerTurn,
+    drawCard
+) where
+
 
 import Types (Money, Hand, Game (..), GameT, Player (..))
 import BlackjackRules (handValue)
@@ -121,7 +125,7 @@ drawCard = do
     case deck gs of
         [] -> do
             let (newDeck, newGen) = shuffle (discard gs) (gen gs)
-            put $ gs { deck = newDeck, discard = [], gen = newGen }
+            put $ gs { deck = newDeck, discard = [], gen = newGen, penetration = 2 * length newDeck }
             drawCard
         (c:cs) -> do
             put $ gs { deck = cs }

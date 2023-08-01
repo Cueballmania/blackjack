@@ -1,7 +1,7 @@
 module Main (main) where
 
-import Game
-import Control.Monad.Trans.State
+import Game ( makeGame, playGame, promptForPlayers )
+import Control.Monad.Trans.State ( evalStateT )
 
 main :: IO ()
 main = do
