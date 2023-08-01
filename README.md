@@ -11,3 +11,17 @@ This is a Haskell implementation of blackjack.
 - Processes blackjack on all two card hands (need to implement no BJ on splits)
 - Deals cards with a cut card to reshuffle
 - Can shuffle discards to finish out a hand if shoe runs out
+
+
+To run, clone this repository. In the top level folder, run 
+```
+stack init
+```
+and you and then start the program with
+```
+stack build
+stack run
+```
+Each player starts with 1000 (chips/dollars/Money)
+
+Ctrl+C to quit out or if you all players lose all of their money the game ends.
