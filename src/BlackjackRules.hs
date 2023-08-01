@@ -1,7 +1,14 @@
-module BlackjackRules where
+-- Helper functions to resolve hands
+module BlackjackRules (
+    hasAce,
+    handValue,
+    dealerBlackjack,
+    isBlackjack,
+    bjPay
+) where
 
-import Deck
-import Types
+import Deck ( Card(Card), Face(Ace), cardValue )
+import Types ( Dealer(hiddenHand, hand), Hand, Money )
 
 handSum :: Hand -> Int
 handSum [] = 0
@@ -20,3 +27,11 @@ handValue hs = if isSoft hs
 
 isBlackjack :: Hand -> Bool
 isBlackjack h = (handValue h == 21) && (length h == 2)
+
+dealerBlackjack :: Dealer -> Bool
+dealerBlackjack d = length h == 2 && handValue h == 21
+    where
+        h = hand d ++ hiddenHand d
+
+bjPay :: Money -> Money
+bjPay b = 3*b `div` 2

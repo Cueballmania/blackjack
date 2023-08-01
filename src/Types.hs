@@ -1,8 +1,15 @@
-module Types where
+module Types (
+    Game (..),
+    GameT,
+    Money,
+    Hand,
+    Player (..),
+    Dealer (..)
+) where
 
-import Deck
-import System.Random
-import Control.Monad.Trans.State
+import Deck ( Deck, Card )
+import System.Random ( StdGen )
+import Control.Monad.Trans.State ( StateT )
 
 data Game = Game
     { deck        :: Deck

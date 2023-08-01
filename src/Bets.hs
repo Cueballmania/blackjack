@@ -1,8 +1,12 @@
-module Bets where
+module Bets (
+  getBets
+) where
 
 import Types
 import Data.List.Split
+import Data.Char (isDigit)
 
+-- Asks for bets and puts all bets into activeHands for that player
 promptForBets :: Player -> IO Player
 promptForBets p = do
   let maxBets = 4 :: Int
@@ -16,6 +20,14 @@ promptForBets p = do
       putStrLn "Invalid bets. Please try again."
       promptForBets p
 
+-- Parses a string of bets into a list of Money values
+parseBets :: String -> [Money]
+parseBets str
+  | all isDigitAndComma str = map read $ filter (not . null) $ splitOn "," str
+  | otherwise = []
+  where isDigitAndComma c = isDigit c || c == ','
+
+-- Gets a bet string for each player
 getBets :: [Player] -> IO [Player]
 getBets [] = return []
 getBets (p:ps) = do
@@ -25,8 +37,5 @@ getBets (p:ps) = do
 
 -- Checks if a list of bets is valid for a player
 isValidBets :: [Money] -> Money -> Bool
+isValidBets [] _ = False
 isValidBets bets br = all (> 0) bets && length bets <= 4 && sum bets <= br
-
--- Parses a string of bets into a list of Money values
-parseBets :: String -> [Money]
-parseBets str = map read $ splitOn "," str

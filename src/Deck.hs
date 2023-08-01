@@ -35,6 +35,7 @@ shuffle dk g =
 draw :: Deck -> (Card, Deck)
 draw dk = (head dk, tail dk)
 
+-- Make Ace 1 and use logic in rules to determine if it should be 1 or 11
 cardValue :: Card -> Int
 cardValue (Card face _) =
     case face of

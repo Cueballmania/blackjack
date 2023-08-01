@@ -1,55 +1,55 @@
-module Game where
+module Game (
+    playGame,
+    makeGame,
+    promptForPlayers
+) where
 
-import Deck
+import Deck ( genDecks, shuffle, cardValue )
 import Types
-import Bets
-import System.Random
-import Actions
-import BlackjackRules
-import OpeningDeal
-import Insurance
-import Control.Monad.Trans.State
+    ( GameT,
+      Dealer(Dealer, hiddenHand, dealerName, hand),
+      Player(Player, activeHands, playedHands, insurance, bankroll,
+             playerName),
+      Hand,
+      Money,
+      Game(..) )
+import Bets ( getBets )
+import System.Random ( initStdGen, Random(randomR) )
+import Actions ( playerTurn, drawCard )
+import BlackjackRules ( handValue, dealerBlackjack, isBlackjack, bjPay )
+import OpeningDeal ( dealOpeningHands )
+import Insurance ( processInsurance )
+import Control.Monad.Trans.State ( get, put, runState)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad (forM, filterM, replicateM)
 import Text.Read (readMaybe)
 
-printTableValue :: [Card] -> IO ()
-printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
-    where vals = sum [cardValue c | c <- cs]
-
+-- Calculates a position for the cut card
+-- If the deck is ever smaller than the the cut card position, the deck is 
+-- shuffled at the end of the hand
 cutCard :: Monad m => GameT m Int
 cutCard = do
-    game <- get
-    let dkSize = length (deck game)
+    gs <- get
+    let dkSize = length (deck gs)
     let (index, gen') = randomR ((0.35 * fromIntegral dkSize) :: Double
-                                ,(0.45 * fromIntegral dkSize) :: Double) (gen game)
+                                ,(0.45 * fromIntegral dkSize) :: Double) (gen gs)
     let pen = ceiling index
-    let game' = game { penetration = pen, gen = gen' }
-    put game'
+    let gs' = gs { penetration = pen, gen = gen' }
+    put gs'
     return pen
 
-dealCard :: State Game Card
-dealCard = do
-    gs <- get
-    case deck gs of
-        [] -> do
-            let (newDeck, newGen) = shuffle (discard gs) (gen gs)
-            put $ gs { deck = newDeck, discard = [], gen = newGen , penetration = 2 * length newDeck }
-            dealCard
-        (c:cs) -> do
-            put $ gs { deck = cs }
-            return c
-
+-- Main loop for the game
+-- Continue the game until all players are broke
 playGame :: GameT IO ()
 playGame = do
-    g <- get
-    let ps = players g
+    gs <- get
+    let ps = players gs
     betPlayers <- liftIO $ getBets ps
-    put $ g { players = betPlayers }
-    (_, g2) <- runState dealOpeningHands <$> get
-    put g2
-    let ps2 = players g2
-    let d = dealer g2
+    put $ gs { players = betPlayers }
+    (_, gs2) <- runState dealOpeningHands <$> get
+    put gs2
+    let ps2 = players gs2
+    let d = dealer gs2
     _ <- liftIO $ putStrLn ""
     liftIO $ print d
     if cardValue (head (hand d)) == 1
@@ -58,29 +58,29 @@ playGame = do
             if dealerBlackjack d
                 then do
                     processDealerBlackjack
-                    g3 <- get
-                    put $ g3 {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
+                    gs3 <- get
+                    put $ gs3 {dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] }}
                 else do
                     newPlayers <- forM ps2 $ \p -> do
                         _ <- liftIO $ putStrLn ""
                         playerTurn p
-                    g3 <- get
-                    put $ g3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+                    gs3 <- get
+                    put $ gs3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
                     _ <- liftIO $ putStrLn ""
                     dealerTurn
         else do
             newPlayers <- forM ps2 $ \p -> do
                 _ <- liftIO $ putStrLn ""
                 playerTurn p
-            g3 <- get
-            put $ g3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
+            gs3 <- get
+            put $ gs3 { players = newPlayers, dealer = d { hand = hand d ++ hiddenHand d, hiddenHand = [] } }
             _ <- liftIO $ putStrLn ""
             dealerTurn
     makePayouts
     cleanupHands
     cleanupPlayers
-    g4 <- get
-    if not (null (players g4))
+    gs4 <- get
+    if not (null (players gs4))
         then do
             _ <- liftIO $ putStrLn "Next hand! \n\n"
             playGame
@@ -88,6 +88,7 @@ playGame = do
             _ <- liftIO $ putStrLn "Game Over"
             return ()
 
+-- Calculates payouts to each player and updates their bankroll
 makePayouts :: GameT IO ()
 makePayouts = do
     gs <- get
@@ -106,6 +107,7 @@ makePayouts = do
 calculatePayouts :: Hand -> [(Hand, Money)] -> IO [Money]
 calculatePayouts d = mapM (calculatePayout d)
 
+-- Calculates and outputs the result of each hand
 calculatePayout :: Hand -> (Hand, Money) -> IO Money
 calculatePayout d (h, b)
     | isBlackjack h = if isBlackjack d
@@ -131,6 +133,7 @@ calculatePayout d (h, b)
                             putStrLn $ "Hand: " ++ show h ++ " (" ++ show (handValue h) ++") Loses"
                             return 0
 
+-- Processes the dealer's turn of hitting all 16s
 dealerTurn :: GameT IO ()
 dealerTurn = do
     gs <- get
@@ -160,7 +163,7 @@ processDealerBlackjack = do
         return $ p { playedHands = ah, activeHands = [] }
     put $ gs { players = newPlayers }
 
-
+-- Move all cards to the discard pile and shuffle if penetration is reached
 cleanupHands :: GameT IO ()
 cleanupHands = do
     gs <- get
@@ -181,6 +184,7 @@ cleanupHands = do
                players = map (\p -> p { playedHands = [], insurance = 0 }) ps,
                discard = discardPile }
 
+-- If player is out of money, remove them from the game
 cleanupPlayers :: GameT IO ()
 cleanupPlayers  = do
     gs <- get
@@ -194,9 +198,6 @@ cleanupPlayers  = do
             else do
                 return True) ps
     put $ gs { players = newPlayers }
-
-bjPay :: Money -> Money
-bjPay b = 3*b `div` 2
 
 promptForPlayers :: IO [String]
 promptForPlayers = do
@@ -215,6 +216,7 @@ promptNames n = do
             putStrLn "Enter player name:"
             getLine
 
+-- Initialize a new game with a random seed and 6 decks
 makeGame :: [String] -> IO Game
 makeGame names = do
     let initPlayers = map (\n -> Player n [] [] 1000 0) names

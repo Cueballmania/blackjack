@@ -1,8 +1,12 @@
-module Actions where
+module Actions (
+    playerTurn,
+    drawCard
+) where
+
 
 import Types (Money, Hand, Game (..), GameT, Player (..))
 import BlackjackRules (handValue)
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State ( get, put, runState, State )
 import Deck (Card, shuffle, cardValue)
 import Control.Monad.IO.Class (liftIO)
 
@@ -13,6 +17,7 @@ data Action =
     | Split
     deriving (Show, Eq)
 
+-- Translates player input into a valid actions
 getValidTurnAction :: (Hand, Money) -> Money -> IO Action
 getValidTurnAction (h, b) br = do
     (prompt, actions) <- turnPrompt (h, b) br
@@ -32,7 +37,7 @@ getValidTurnAction (h, b) br = do
             putStrLn "Invalid action. Try again."
             getValidTurnAction (h, b) br
 
-
+-- Processes each turn
 turnPrompt :: (Hand, Money) -> Money -> IO (String, [Action])
 turnPrompt (h, b) br =
     let
@@ -49,7 +54,10 @@ turnPrompt (h, b) br =
     in
         return (prompt, actions)
 
-
+-- Processes a player's turn
+-- For each active hand, the hand takes actions until it moves to
+-- the player's played hands
+-- This is needed for correct Split logic of inserting a new hand in order
 playerTurn :: Player -> GameT IO Player
 playerTurn p = do
     let aHands = activeHands p
@@ -96,6 +104,7 @@ playerTurn p = do
                     playerTurn newPlayer
 
 
+-- Takes an action and does the correct thing to the hand given the action
 takeAction :: Action -> (Hand, Money) -> State Game [(Hand, Money)]
 takeAction Stand (h, b) = return [(h, b)]
 takeAction Hit (h, b) = do
@@ -115,13 +124,16 @@ takeAction Split (h, b) = if length h == 2 && cardValue (head h) == cardValue (h
                                 else do
                                     return [(h,b)]
 
+-- Stateful draw method. If the deck is empty, it shuffles the discard pile to draw a new card
+-- When the discard pile is shuffled, it changes the penetration to tell the game
+-- To reshuffle and insert a cut card at the end of round
 drawCard :: State Game Card
 drawCard = do
     gs <- get
     case deck gs of
         [] -> do
             let (newDeck, newGen) = shuffle (discard gs) (gen gs)
-            put $ gs { deck = newDeck, discard = [], gen = newGen }
+            put $ gs { deck = newDeck, discard = [], gen = newGen, penetration = 2 * length newDeck }
             drawCard
         (c:cs) -> do
             put $ gs { deck = cs }
