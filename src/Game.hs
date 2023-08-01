@@ -1,21 +1,28 @@
-module Game where
+module Game (
+    playGame,
+    makeGame,
+    promptForPlayers
+) where
 
-import Deck
+import Deck ( genDecks, shuffle, cardValue )
 import Types
-import Bets
-import System.Random
-import Actions
-import BlackjackRules
-import OpeningDeal
-import Insurance
-import Control.Monad.Trans.State
+    ( GameT,
+      Dealer(Dealer, hiddenHand, dealerName, hand),
+      Player(Player, activeHands, playedHands, insurance, bankroll,
+             playerName),
+      Hand,
+      Money,
+      Game(..) )
+import Bets ( getBets )
+import System.Random ( initStdGen, Random(randomR) )
+import Actions ( playerTurn, drawCard )
+import BlackjackRules ( handValue, dealerBlackjack, isBlackjack, bjPay )
+import OpeningDeal ( dealOpeningHands )
+import Insurance ( processInsurance )
+import Control.Monad.Trans.State ( get, put, runState)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad (forM, filterM, replicateM)
 import Text.Read (readMaybe)
-
-printTableValue :: [Card] -> IO ()
-printTableValue cs = putStrLn $ "The value of cards is " ++ show vals
-    where vals = sum [cardValue c | c <- cs]
 
 cutCard :: Monad m => GameT m Int
 cutCard = do
@@ -27,18 +34,6 @@ cutCard = do
     let game' = game { penetration = pen, gen = gen' }
     put game'
     return pen
-
-dealCard :: State Game Card
-dealCard = do
-    gs <- get
-    case deck gs of
-        [] -> do
-            let (newDeck, newGen) = shuffle (discard gs) (gen gs)
-            put $ gs { deck = newDeck, discard = [], gen = newGen , penetration = 2 * length newDeck }
-            dealCard
-        (c:cs) -> do
-            put $ gs { deck = cs }
-            return c
 
 playGame :: GameT IO ()
 playGame = do
@@ -195,8 +190,6 @@ cleanupPlayers  = do
                 return True) ps
     put $ gs { players = newPlayers }
 
-bjPay :: Money -> Money
-bjPay b = 3*b `div` 2
 
 promptForPlayers :: IO [String]
 promptForPlayers = do

@@ -1,15 +1,12 @@
-module Insurance where
+module Insurance (
+    processInsurance
+) where
 
-import Types (Dealer(..), Player (..), Game(..), GameT)
-import BlackjackRules
-import Control.Monad.Trans.State
-import Control.Monad
-import Control.Monad.IO.Class
-
-dealerBlackjack :: Dealer -> Bool
-dealerBlackjack d = length h == 2 && handValue h == 21
-    where
-        h = hand d ++ hiddenHand d
+import Types (Player (..), Game(..), GameT)
+import BlackjackRules ( dealerBlackjack )
+import Control.Monad.Trans.State ( get, put )
+import Control.Monad ( forM )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
 
 calcMaxInsurance :: Player -> Int
 calcMaxInsurance p = min (bankroll p) (div (sum $ map snd $ activeHands p) 2)

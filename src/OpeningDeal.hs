@@ -1,9 +1,13 @@
-module OpeningDeal where
+module OpeningDeal (
+    dealOpeningHands
+) where
 
 import Types
-import Deck
+    ( Dealer(hiddenHand, hand),
+      Player(activeHands),
+      Game(dealer, players) )
 import Actions  (drawCard)
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State ( get, put, State )
 import Control.Monad (forM)
 
 dealOpeningHands :: State Game ()
